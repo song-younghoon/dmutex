@@ -78,19 +78,17 @@ await mongoClient.connect();
 const dmutex = new DMutex("my-service", mongoClient);
 await dmutex.ready();
 
-const lock = await dmutex.acquire("job:daily-report", 60);
+const result = await dmutex.run("job:daily-report", async () => {
+  // Run protected work.
+  return "done";
+}, 60);
 
-if (!lock) {
+if (result === null) {
   // Another process already holds this lock.
   process.exit(0);
 }
 
-try {
-  // Run protected work.
-} finally {
-  await lock.release();
-  await mongoClient.close();
-}
+await mongoClient.close();
 ```
 
 ### Redis
@@ -104,19 +102,17 @@ await redisClient.connect();
 
 const dmutex = new DMutex("my-service", redisClient);
 
-const lock = await dmutex.acquire("job:daily-report", 60);
+const result = await dmutex.run("job:daily-report", async () => {
+  // Run protected work.
+  return "done";
+}, 60);
 
-if (!lock) {
+if (result === null) {
   // Another process already holds this lock.
   process.exit(0);
 }
 
-try {
-  // Run protected work.
-} finally {
-  await lock.release();
-  await redisClient.close();
-}
+await redisClient.close();
 ```
 
 ## API
@@ -149,6 +145,28 @@ await dmutex.ready();
 ```
 
 Waits for backend initialization. For MongoDB, this waits for the TTL index to be created. For Redis, this is a no-op. `acquire()`, `lock()`, `unlock()`, and `extend()` also wait for any required initialization internally, but calling `ready()` during application startup surfaces MongoDB initialization failures earlier.
+
+### `run(key, callback, ttl?)`
+
+```ts
+const result = await dmutex.run("some-key", async (lock) => {
+  await lock.extend(300);
+  return "done";
+}, 300);
+
+if (result === null) {
+  // Another process already holds this lock.
+}
+```
+
+Attempts to acquire a lock, runs the callback while the lock is held, and releases the lock in a `finally` block.
+
+- `key`: lock identifier
+- `callback`: function to run while holding the lock. It receives the acquired `DMutexLock`.
+- `ttl`: lock TTL in seconds. Defaults to 300 seconds.
+- returns: the callback result when the lock is acquired, or `null` when another holder already owns the key
+
+If the callback throws, `run()` releases the lock and rethrows the callback error. `run()` does not automatically renew long-running locks; use the callback's `lock.extend(ttl)` when the protected work may run longer than the TTL.
 
 ### `acquire(key, ttl?)`
 

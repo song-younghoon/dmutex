@@ -159,6 +159,23 @@ export class DMutex {
     };
   }
 
+  public run = async <T>(
+    key: string,
+    callback: (lock: DMutexLock) => Promise<T> | T,
+    ttl?: number,
+  ): Promise<T | null> => {
+    const lock = await this.acquire(key, ttl);
+    if (!lock) {
+      return null;
+    }
+
+    try {
+      return await callback(lock);
+    } finally {
+      await lock.release();
+    }
+  }
+
   /**
    * @deprecated Use acquire() instead. acquire() returns a lock handle that
    * carries its ownership token and is safer across async boundaries.

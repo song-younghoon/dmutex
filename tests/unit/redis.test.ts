@@ -118,6 +118,46 @@ describe("Redis mutex backend", () => {
     await nextLock!.release();
   });
 
+  test("should run a callback while holding a lock and release afterward", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const result = await mutex.run("run-key", async (lock) => {
+      expect(lock.key).toBe("run-key");
+      expect(await mutex.acquire("run-key", 30)).toBeNull();
+      return "completed";
+    }, 30);
+
+    expect(result).toBe("completed");
+    expect(await mutex.acquire("run-key", 30)).not.toBeNull();
+  });
+
+  test("should return null from run when the lock is already held", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const lock = await mutex.acquire("busy-key", 30);
+    expect(lock).not.toBeNull();
+
+    const result = await mutex.run("busy-key", () => "should-not-run", 30);
+    expect(result).toBeNull();
+
+    await lock!.release();
+  });
+
+  test("should release the lock when run callback throws", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    await expect(
+      mutex.run("throw-key", () => {
+        throw new Error("callback failed");
+      }, 30),
+    ).rejects.toThrow("callback failed");
+
+    expect(await mutex.acquire("throw-key", 30)).not.toBeNull();
+  });
+
   test("should namespace Redis keys by service", async () => {
     const redisClient = new FakeRedisClient();
     const firstMutex = new DMutex("first-service", redisClient);
