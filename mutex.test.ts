@@ -3,20 +3,33 @@ import { MongoClient } from "mongodb";
 import { Mutex, type DmutexMongoCollectionDocument } from "./mutex";
 
 describe("Mutex", () => {
-  let mongoClient: MongoClient;
+  let mongoClient: MongoClient | undefined;
   let mutex: Mutex;
+  const collectionName = `_dmutex_test-service_${process.pid}`;
 
   beforeAll(async () => {
     const url = process.env.MONGODB_URL || "mongodb://localhost:27017";
-    mongoClient = new MongoClient(url);
-    await mongoClient.connect();
+    mongoClient = new MongoClient(url, { serverSelectionTimeoutMS: 1000 });
+    try {
+      await mongoClient.connect();
+    } catch (error) {
+      throw new Error(
+        `MongoDB is required for integration tests. Start MongoDB or set MONGODB_URL. Tried: ${url}`,
+        { cause: error },
+      );
+    }
 
-    mutex = new Mutex("test-service", mongoClient);
+    mutex = new Mutex("test-service", mongoClient, { collectionName });
+    await mutex.ready();
   });
 
   afterAll(async () => {
+    if (!mongoClient) {
+      return;
+    }
+
     const db = mongoClient.db('dmutex');
-    await db.collection('_dmutex_test-service').drop().catch(() => {});
+    await db.collection(collectionName).drop().catch(() => {});
     await mongoClient.close();
   });
 
@@ -68,8 +81,8 @@ describe("Mutex", () => {
     expect(result).toBe(true);
 
     // Check if the document has the correct expiredAt field
-    const db = mongoClient.db('dmutex');
-    const collection = db.collection<DmutexMongoCollectionDocument>('_dmutex_test-service');
+    const db = mongoClient!.db('dmutex');
+    const collection = db.collection<DmutexMongoCollectionDocument>(collectionName);
     const doc = await collection.findOne({ _id: key });
 
     expect(doc).not.toBeNull();
@@ -104,5 +117,67 @@ describe("Mutex", () => {
 
     // Cleanup
     await mutex.unlock(key);
+  });
+
+  test("should not release a lock owned by another token", async () => {
+    const key = "test-key-token";
+    const firstLock = await mutex.acquire(key, 30);
+    expect(firstLock).not.toBeNull();
+
+    const secondMutex = new Mutex("test-service", mongoClient!, { collectionName });
+    const releasedBySecondMutex = await secondMutex.unlock(key, "wrong-token");
+    expect(releasedBySecondMutex).toBe(false);
+
+    const secondLockAttempt = await secondMutex.acquire(key, 30);
+    expect(secondLockAttempt).toBeNull();
+
+    // Cleanup
+    await firstLock!.release();
+  });
+
+  test("should allow takeover of expired lock without waiting for TTL cleanup", async () => {
+    const key = "test-key-expired-takeover";
+    const firstLock = await mutex.acquire(key, 30);
+    expect(firstLock).not.toBeNull();
+
+    const db = mongoClient!.db('dmutex');
+    const collection = db.collection<DmutexMongoCollectionDocument>(collectionName);
+    await collection.updateOne(
+      { _id: key },
+      { $set: { expiredAt: new Date(Date.now() - 1000) } },
+    );
+
+    const secondLock = await mutex.acquire(key, 30);
+    expect(secondLock).not.toBeNull();
+    expect(secondLock!.token).not.toBe(firstLock!.token);
+
+    const staleRelease = await firstLock!.release();
+    expect(staleRelease).toBe(false);
+
+    const doc = await collection.findOne({ _id: key });
+    expect(doc?.value).toBe(secondLock!.token);
+
+    // Cleanup
+    await secondLock!.release();
+  });
+
+  test("should extend only an active owned lock", async () => {
+    const key = "test-key-extend";
+    const lock = await mutex.acquire(key, 5);
+    expect(lock).not.toBeNull();
+
+    const extended = await lock!.extend(30);
+    expect(extended).toBe(true);
+
+    const invalidOwnerExtended = await mutex.extend(key, "wrong-token", 30);
+    expect(invalidOwnerExtended).toBe(false);
+
+    // Cleanup
+    await lock!.release();
+  });
+
+  test("should reject invalid ttl values", async () => {
+    await expect(mutex.lock("test-key-invalid-ttl", 0)).rejects.toThrow(RangeError);
+    await expect(mutex.acquire("test-key-invalid-ttl", -1)).rejects.toThrow(RangeError);
   });
 });

@@ -3,18 +3,30 @@
   "version": "0.1.2",
   "type": "commonjs",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/song-younghoon/dmutex.git"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "bun test mutex.test.ts",
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "mongodb": ">=4.0.0",
     "typescript": "^5"
-  },
-  "peerDependencies": {
-    "mongodb": "^6.20.0"
   }
 }
