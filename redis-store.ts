@@ -1,5 +1,5 @@
-import type { DmutexRedisClient, RedisMutexOptions } from "./types";
-import type { MutexStore } from "./store";
+import type { DmutexRedisClient, RedisDMutexOptions } from "./types";
+import type { DMutexStore } from "./store";
 
 const RELEASE_SCRIPT = `
 if redis.call("GET", KEYS[1]) == ARGV[1] then
@@ -21,11 +21,11 @@ const toBooleanResult = (result: unknown) => {
   return result === 1 || result === true || result === "1" || result === "OK";
 }
 
-export class RedisMutexStore implements MutexStore {
+export class RedisDMutexStore implements DMutexStore {
   private redisClient: DmutexRedisClient
   private keyPrefix: string
 
-  constructor(serviceName: string, redisClient: DmutexRedisClient, options: RedisMutexOptions) {
+  constructor(serviceName: string, redisClient: DmutexRedisClient, options: RedisDMutexOptions) {
     this.redisClient = redisClient;
     this.keyPrefix = options.keyPrefix ?? `_dmutex_${serviceName}:`;
   }

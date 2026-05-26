@@ -33,27 +33,23 @@ export type DmutexRedisMethodClient = {
 
 export type DmutexRedisClient = DmutexRedisCommandClient | DmutexRedisMethodClient
 
-export type MutexBackend = "mongodb" | "redis"
-
-export type BaseMutexOptions = {
+export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
 }
 
-export type MongoMutexOptions = BaseMutexOptions & {
-  backend?: "mongodb"
+export type MongoDMutexOptions = BaseDMutexOptions & {
   dbName?: string
   collectionName?: string
   collectionPrefix?: string
 }
 
-export type RedisMutexOptions = BaseMutexOptions & {
-  backend: "redis"
+export type RedisDMutexOptions = BaseDMutexOptions & {
   keyPrefix?: string
 }
 
-export type MutexOptions = MongoMutexOptions | RedisMutexOptions
+export type DMutexOptions = MongoDMutexOptions | RedisDMutexOptions
 
-export type MutexLock = {
+export type DMutexLock = {
   key: string
   token: string
   expiredAt: Date

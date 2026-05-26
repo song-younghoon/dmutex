@@ -73,9 +73,9 @@
 
 - Status: Done
 - Problem: MongoDB, Redis, shared store contracts, and public API code in one file make future backend additions harder to review and maintain.
-- Improvement: split public types, store contract, MongoDB store, Redis store, and public `Mutex` API into separate runtime modules.
+- Improvement: split public types, store contract, MongoDB store, Redis store, and public `DMutex` API into separate runtime modules.
 - Acceptance criteria:
-  - `mutex.ts` focuses on the public `Mutex` API.
+  - `mutex.ts` focuses on the public `DMutex` API.
   - Backend-specific code lives in backend-specific files.
   - Published package still includes all runtime files needed by CommonJS consumers.
 
@@ -85,7 +85,7 @@
 
 - Status: Done
 - Problem: the project goal is a common distributed-lock interface with selectable backends, but the implementation was tied directly to MongoDB operations.
-- Improvement: introduce internal storage adapters and keep `Mutex.acquire()`, `lock()`, `unlock()`, and `extend()` backend-neutral.
+- Improvement: introduce internal storage adapters and keep `DMutex.acquire()`, `lock()`, `unlock()`, and `extend()` backend-neutral.
 - Acceptance criteria:
   - Existing MongoDB constructor usage remains compatible.
   - Redis can be selected through constructor options without changing lock call sites.
@@ -116,10 +116,11 @@
 
 - Status: Done
 - Problem: database name, collection naming, and default TTL are hardcoded.
-- Improvement: support constructor options for MongoDB database/collection naming, Redis key prefixing, backend selection, and `defaultTtlSeconds`.
+- Improvement: support constructor options for MongoDB database/collection naming, Redis key prefixing, automatic backend detection, and `defaultTtlSeconds`.
 - Acceptance criteria:
   - Existing constructor usage remains valid.
   - Advanced users can isolate databases/collections per environment.
+  - Normal users do not need to pass a backend option when the injected client shape is unambiguous.
 
 ### 13. Renewal API
 

@@ -1,18 +1,20 @@
 import { randomUUID } from "crypto";
-import { MongoMutexStore } from "./mongo-store";
-import { RedisMutexStore } from "./redis-store";
-import type { MutexStore } from "./store";
+import { MongoDMutexStore } from "./mongo-store";
+import { RedisDMutexStore } from "./redis-store";
+import type { DMutexStore } from "./store";
 import type {
   DmutexMongoClient,
   DmutexRedisClient,
-  MongoMutexOptions,
-  MutexLock,
-  MutexOptions,
-  RedisMutexOptions,
+  DMutexLock,
+  DMutexOptions,
+  MongoDMutexOptions,
+  RedisDMutexOptions,
 } from "./types";
 
 export type {
-  BaseMutexOptions,
+  BaseDMutexOptions,
+  DMutexLock,
+  DMutexOptions,
   DmutexMongoClient,
   DmutexMongoCollection,
   DmutexMongoCollectionDocument,
@@ -20,26 +22,68 @@ export type {
   DmutexRedisClient,
   DmutexRedisCommandClient,
   DmutexRedisMethodClient,
-  MongoMutexOptions,
-  MutexBackend,
-  MutexLock,
-  MutexOptions,
-  RedisMutexOptions,
+  MongoDMutexOptions,
+  RedisDMutexOptions,
 } from "./types";
 
-export class Mutex {
+const hasFunction = <T extends string>(
+  value: unknown,
+  name: T,
+): value is Record<T, (...args: any[]) => unknown> => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    name in value &&
+    typeof (value as Record<T, unknown>)[name] === "function"
+  );
+}
+
+const isMongoClient = (client: unknown): client is DmutexMongoClient => {
+  return hasFunction(client, "db");
+}
+
+const isRedisClient = (client: unknown): client is DmutexRedisClient => {
+  return hasFunction(client, "sendCommand") ||
+    (hasFunction(client, "set") && hasFunction(client, "eval"));
+}
+
+const detectBackend = (client: DmutexMongoClient | DmutexRedisClient) => {
+  const matchesMongo = isMongoClient(client);
+  const matchesRedis = isRedisClient(client);
+
+  if (matchesMongo && !matchesRedis) {
+    return "mongodb";
+  }
+
+  if (matchesRedis && !matchesMongo) {
+    return "redis";
+  }
+
+  if (matchesMongo && matchesRedis) {
+    throw new Error(
+      "Cannot detect dmutex backend because the client matches both MongoDB and Redis contracts",
+    );
+  }
+
+  throw new Error(
+    "Cannot detect dmutex backend; client must provide MongoDB db() or Redis sendCommand(args) / set(...args) plus eval(...args)",
+  );
+}
+
+export class DMutex {
   private defaultTtlSeconds: number
-  private store: MutexStore
+  private store: DMutexStore
   private lockTokens = new Map<string, string>()
 
-  constructor(serviceName: string, client: DmutexMongoClient, options?: MongoMutexOptions)
-  constructor(serviceName: string, client: DmutexRedisClient, options: RedisMutexOptions)
+  constructor(serviceName: string, client: DmutexMongoClient, options?: MongoDMutexOptions)
+  constructor(serviceName: string, client: DmutexRedisClient, options?: RedisDMutexOptions)
 
-  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: MutexOptions = {}) {
+  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: DMutexOptions = {}) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
-    this.store = options.backend === "redis"
-      ? new RedisMutexStore(serviceName, client as DmutexRedisClient, options)
-      : new MongoMutexStore(serviceName, client as DmutexMongoClient, options);
+    const backend = detectBackend(client);
+    this.store = backend === "redis"
+      ? new RedisDMutexStore(serviceName, client as DmutexRedisClient, options as RedisDMutexOptions)
+      : new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);
   }
 
   public ready = async () => {
@@ -64,7 +108,7 @@ export class Mutex {
     return expiredAt !== null;
   }
 
-  public acquire = async (key: string, ttl?: number): Promise<MutexLock | null> => {
+  public acquire = async (key: string, ttl?: number): Promise<DMutexLock | null> => {
     const token = randomUUID();
     const expiredAt = await this.acquireWithToken(key, token, ttl);
     if (!expiredAt) {

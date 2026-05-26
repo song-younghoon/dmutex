@@ -2,7 +2,7 @@
 
 A small TypeScript distributed mutex library that can use MongoDB or Redis as its backend.
 
-`Mutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. Applications can use the same `Mutex` interface while choosing either MongoDB or Redis as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. Applications can use the same `DMutex` interface while choosing either MongoDB or Redis as the implementation.
 
 ## Installation
 
@@ -30,12 +30,12 @@ Redis compatibility is currently pinned with real package tests for:
 
 ```ts
 import { MongoClient } from "mongodb";
-import { Mutex } from "dmutex";
+import { DMutex } from "dmutex";
 
 const mongoClient = new MongoClient("mongodb://localhost:27017");
 await mongoClient.connect();
 
-const mutex = new Mutex("my-service", mongoClient);
+const mutex = new DMutex("my-service", mongoClient);
 await mutex.ready();
 
 const lock = await mutex.acquire("job:daily-report", 60);
@@ -57,12 +57,12 @@ try {
 
 ```ts
 import { createClient } from "redis";
-import { Mutex } from "dmutex";
+import { DMutex } from "dmutex";
 
 const redisClient = createClient({ url: "redis://localhost:6379" });
 await redisClient.connect();
 
-const mutex = new Mutex("my-service", redisClient, { backend: "redis" });
+const mutex = new DMutex("my-service", redisClient);
 
 const lock = await mutex.acquire("job:daily-report", 60);
 
@@ -81,13 +81,12 @@ try {
 
 ## API
 
-### `new Mutex(serviceName, client, options?)`
+### `new DMutex(serviceName, client, options?)`
 
 Creates a mutex instance for a service.
 
 - `serviceName`: service identifier used for backend-specific namespacing
-- `client`: MongoDB or Redis client
-- `options.backend`: backend to use, either `"mongodb"` or `"redis"`. Defaults to `"mongodb"` for backward compatibility.
+- `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
 
 MongoDB options:
@@ -128,9 +127,9 @@ Attempts to acquire a lock for the given key.
 
 - `key`: lock identifier
 - `ttl`: lock TTL in seconds. Defaults to 300 seconds.
-- returns: `MutexLock` when the lock is acquired, or `null` when another holder already owns the key
+- returns: `DMutexLock` when the lock is acquired, or `null` when another holder already owns the key
 
-`MutexLock` contains:
+`DMutexLock` contains:
 
 - `key`: lock key
 - `token`: ownership token
@@ -158,7 +157,7 @@ This is the legacy boolean-style API. New code should prefer `acquire()`, which 
 await mutex.unlock("some-key");
 ```
 
-Deletes the lock for the given key. If `token` is provided, only a lock with the matching token is released. Locks acquired through `lock()` can be released with `unlock(key)` from the same `Mutex` instance because the instance keeps the internal token.
+Deletes the lock for the given key. If `token` is provided, only a lock with the matching token is released. Locks acquired through `lock()` can be released with `unlock(key)` from the same `DMutex` instance because the instance keeps the internal token.
 
 ### `extend(key, token, ttl?)`
 
@@ -181,12 +180,14 @@ Redis:
 
 - Lock acquisition uses `SET key token PX ttl NX`.
 - Lock release and extension use Lua `EVAL` scripts to verify the token and run `DEL` or `PEXPIRE` atomically.
-- `MutexLock.expiredAt` is calculated with the client clock. Actual expiration is enforced by Redis TTL.
+- `DMutexLock.expiredAt` is calculated with the client clock. Actual expiration is enforced by Redis TTL.
 
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - The package does not import `mongodb`, `redis`, or `ioredis` at runtime. Client implementations are injected by the application.
+- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`.
+- A client that matches multiple backend contracts is rejected because backend selection would be ambiguous.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
 

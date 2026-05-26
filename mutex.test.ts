@@ -1,10 +1,10 @@
 import { test, expect, beforeAll, afterAll, describe } from "bun:test";
 import { MongoClient } from "mongodb";
-import { Mutex, type DmutexMongoCollectionDocument } from "./mutex";
+import { DMutex, type DmutexMongoCollectionDocument } from "./mutex";
 
-describe("Mutex", () => {
+describe("DMutex", () => {
   let mongoClient: MongoClient | undefined;
-  let mutex: Mutex;
+  let mutex: DMutex;
   const collectionName = `_dmutex_test-service_${process.pid}`;
 
   beforeAll(async () => {
@@ -19,7 +19,7 @@ describe("Mutex", () => {
       );
     }
 
-    mutex = new Mutex("test-service", mongoClient, { collectionName });
+    mutex = new DMutex("test-service", mongoClient, { collectionName });
     await mutex.ready();
   });
 
@@ -124,7 +124,7 @@ describe("Mutex", () => {
     const firstLock = await mutex.acquire(key, 30);
     expect(firstLock).not.toBeNull();
 
-    const secondMutex = new Mutex("test-service", mongoClient!, { collectionName });
+    const secondMutex = new DMutex("test-service", mongoClient!, { collectionName });
     const releasedBySecondMutex = await secondMutex.unlock(key, "wrong-token");
     expect(releasedBySecondMutex).toBe(false);
 

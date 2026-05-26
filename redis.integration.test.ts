@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import Redis from "ioredis";
 import { createClient, type RedisClientType } from "redis";
-import { Mutex } from "./mutex";
+import { DMutex } from "./mutex";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const clients: Array<{ close: () => Promise<unknown> }> = [];
@@ -19,7 +19,7 @@ const requireRedis = async <T>(connect: () => Promise<T>) => {
   }
 }
 
-const exerciseMutex = async (mutex: Mutex, key: string) => {
+const exerciseMutex = async (mutex: DMutex, key: string) => {
   const firstLock = await mutex.acquire(key, 30);
   expect(firstLock).not.toBeNull();
 
@@ -62,8 +62,7 @@ describe("Redis client integrations", () => {
     });
     clients.push({ close: async () => await client.quit() });
 
-    const mutex = new Mutex("test-service", client, {
-      backend: "redis",
+    const mutex = new DMutex("test-service", client, {
       keyPrefix: makePrefix("node_redis"),
     });
 
@@ -83,8 +82,7 @@ describe("Redis client integrations", () => {
     });
     clients.push({ close: async () => await client.quit() });
 
-    const mutex = new Mutex("test-service", client, {
-      backend: "redis",
+    const mutex = new DMutex("test-service", client, {
       keyPrefix: makePrefix("ioredis"),
     });
 

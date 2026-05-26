@@ -1,9 +1,9 @@
 import type {
   DmutexMongoClient,
   DmutexMongoCollection,
-  MongoMutexOptions,
+  MongoDMutexOptions,
 } from "./types";
-import type { MutexStore } from "./store";
+import type { DMutexStore } from "./store";
 
 const isDuplicateKeyError = (error: unknown) => {
   return (
@@ -14,11 +14,11 @@ const isDuplicateKeyError = (error: unknown) => {
   );
 }
 
-export class MongoMutexStore implements MutexStore {
+export class MongoDMutexStore implements DMutexStore {
   private collection: DmutexMongoCollection
   private indexReady: Promise<string>
 
-  constructor(serviceName: string, mongoClient: DmutexMongoClient, options: MongoMutexOptions) {
+  constructor(serviceName: string, mongoClient: DmutexMongoClient, options: MongoDMutexOptions) {
     const db = mongoClient.db(options.dbName ?? 'dmutex');
     this.collection = db.collection(
       options.collectionName ?? `${options.collectionPrefix ?? '_dmutex_'}${serviceName}`,

@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { Mutex } from "./mutex";
+import { DMutex } from "./mutex";
 
 type RedisEntry = {
   value: string
@@ -78,7 +78,7 @@ class FakeRedisClient {
 describe("Redis mutex backend", () => {
   test("should support the legacy boolean lock interface", async () => {
     const redisClient = new FakeRedisClient();
-    const mutex = new Mutex("test-service", redisClient, { backend: "redis" });
+    const mutex = new DMutex("test-service", redisClient);
 
     const locked = await mutex.lock("legacy-key", 30);
     expect(locked).toBe(true);
@@ -96,7 +96,7 @@ describe("Redis mutex backend", () => {
 
   test("should acquire, reject contention, extend, and release with ownership token", async () => {
     const redisClient = new FakeRedisClient();
-    const mutex = new Mutex("test-service", redisClient, { backend: "redis" });
+    const mutex = new DMutex("test-service", redisClient);
 
     const firstLock = await mutex.acquire("test-key", 30);
     expect(firstLock).not.toBeNull();
@@ -120,8 +120,8 @@ describe("Redis mutex backend", () => {
 
   test("should namespace Redis keys by service", async () => {
     const redisClient = new FakeRedisClient();
-    const firstMutex = new Mutex("first-service", redisClient, { backend: "redis" });
-    const secondMutex = new Mutex("second-service", redisClient, { backend: "redis" });
+    const firstMutex = new DMutex("first-service", redisClient);
+    const secondMutex = new DMutex("second-service", redisClient);
 
     const firstLock = await firstMutex.acquire("shared-key", 30);
     const secondLock = await secondMutex.acquire("shared-key", 30);
@@ -137,9 +137,24 @@ describe("Redis mutex backend", () => {
 
   test("should reject invalid ttl values before sending Redis commands", async () => {
     const redisClient = new FakeRedisClient();
-    const mutex = new Mutex("test-service", redisClient, { backend: "redis" });
+    const mutex = new DMutex("test-service", redisClient);
 
     await expect(mutex.lock("invalid-ttl", 0)).rejects.toThrow(RangeError);
     await expect(mutex.acquire("invalid-ttl", -1)).rejects.toThrow(RangeError);
+  });
+
+  test("should reject clients that do not match a supported backend contract", () => {
+    expect(() => new DMutex("test-service", {} as any)).toThrow("Cannot detect dmutex backend");
+  });
+
+  test("should reject clients that match multiple backend contracts", () => {
+    const ambiguousClient = {
+      db: () => ({ collection: () => ({}) }),
+      sendCommand: async () => "OK",
+    };
+
+    expect(() => new DMutex("test-service", ambiguousClient as any)).toThrow(
+      "matches both MongoDB and Redis contracts",
+    );
   });
 });
