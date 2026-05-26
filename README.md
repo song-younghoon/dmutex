@@ -88,6 +88,7 @@ Creates a mutex instance for a service.
 - `serviceName`: service identifier used for backend-specific namespacing
 - `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
+- `options.backend`: optional explicit backend override, either `mongodb` or `redis`. Use this when a wrapped client matches more than one backend contract.
 
 MongoDB options:
 
@@ -187,7 +188,7 @@ Common:
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - The package does not import `mongodb`, `redis`, or `ioredis` at runtime. Client implementations are injected by the application.
 - Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`.
-- A client that matches multiple backend contracts is rejected because backend selection would be ambiguous.
+- A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
 
@@ -205,10 +206,20 @@ Build:
 bun run build
 ```
 
-Run all tests:
+Run the default test suite:
 
 ```bash
-bun test
+bun run test
+```
+
+This runs the fast unit suite only and does not require MongoDB or Redis.
+
+Running `bun test` directly is also safe: integration tests are skipped unless `DMUTEX_INTEGRATION=1` is set.
+
+Run all unit tests explicitly:
+
+```bash
+bun run test:unit
 ```
 
 Run only Redis adapter unit tests:
@@ -223,14 +234,40 @@ Run only real `redis` and `ioredis` client integration tests:
 bun run test:redis:integration
 ```
 
-Run only MongoDB adapter tests:
+Run only MongoDB integration tests:
 
 ```bash
 bun run test:mongodb
 ```
 
-The full test suite requires MongoDB and Redis. The default MongoDB URL is `mongodb://localhost:27017`, and the default Redis URL is `redis://localhost:6379`. Set `MONGODB_URL` and `REDIS_URL` to use different endpoints.
+Run all integration tests:
 
 ```bash
-MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun test
+bun run test:integration
+```
+
+The integration suite requires MongoDB and Redis. The default MongoDB URL is `mongodb://localhost:27017`, and the default Redis URL is `redis://localhost:6379`. Set `MONGODB_URL` and `REDIS_URL` to use different endpoints.
+
+```bash
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun run test:integration
+```
+
+### Integration Tests with Docker Compose
+
+Start MongoDB and Redis:
+
+```bash
+docker compose up -d
+```
+
+Run the integration suite against those services:
+
+```bash
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun run test:integration
+```
+
+Stop the services:
+
+```bash
+docker compose down
 ```

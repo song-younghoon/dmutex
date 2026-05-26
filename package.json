@@ -1,9 +1,11 @@
 {
   "name": "dmutex",
   "version": "0.3.0",
+  "description": "A small TypeScript distributed mutex library for MongoDB and Redis.",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,13 +21,25 @@
     "type": "git",
     "url": "git+https://github.com/song-younghoon/dmutex.git"
   },
+  "keywords": [
+    "distributed-lock",
+    "mutex",
+    "mongodb",
+    "redis",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
-    "test": "bun test *.test.ts",
-    "test:mongodb": "bun test mutex.test.ts",
-    "test:redis": "bun test redis.test.ts redis.integration.test.ts",
+    "test": "bun run test:unit",
+    "test:unit": "bun test mongo.test.ts redis.test.ts",
+    "test:integration": "DMUTEX_INTEGRATION=1 bun test mutex.test.ts redis.integration.test.ts",
+    "test:mongodb": "DMUTEX_INTEGRATION=1 bun test mutex.test.ts",
+    "test:redis": "DMUTEX_INTEGRATION=1 bun test redis.test.ts redis.integration.test.ts",
     "test:redis:unit": "bun test redis.test.ts",
-    "test:redis:integration": "bun test redis.integration.test.ts",
+    "test:redis:integration": "DMUTEX_INTEGRATION=1 bun test redis.integration.test.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {

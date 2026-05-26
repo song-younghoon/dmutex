@@ -157,4 +157,16 @@ describe("Redis mutex backend", () => {
       "matches both MongoDB and Redis contracts",
     );
   });
+
+  test("should allow explicit Redis backend for ambiguous clients", async () => {
+    const redisClient = new FakeRedisClient();
+    const ambiguousClient = Object.assign(redisClient, {
+      db: () => ({ collection: () => ({}) }),
+    });
+    const mutex = new DMutex("test-service", ambiguousClient, { backend: "redis" });
+
+    const lock = await mutex.acquire("explicit-backend-key", 30);
+    expect(lock).not.toBeNull();
+    await lock!.release();
+  });
 });

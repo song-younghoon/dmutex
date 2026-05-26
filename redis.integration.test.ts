@@ -5,6 +5,7 @@ import { DMutex } from "./mutex";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const clients: Array<{ close: () => Promise<unknown> }> = [];
+const describeIntegration = process.env.DMUTEX_INTEGRATION === "1" ? describe : describe.skip;
 
 const makePrefix = (name: string) => `_dmutex_${name}_${process.pid}_${Date.now()}:`;
 
@@ -47,7 +48,7 @@ afterEach(async () => {
   }
 });
 
-describe("Redis client integrations", () => {
+describeIntegration("Redis client integrations", () => {
   test("supports redis createClient", async () => {
     const client = await requireRedis(async () => {
       const redisClient = createClient({

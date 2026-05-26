@@ -3,6 +3,7 @@ import { MongoDMutexStore } from "./mongo-store";
 import { RedisDMutexStore } from "./redis-store";
 import type { DMutexStore } from "./store";
 import type {
+  DMutexBackend,
   DmutexMongoClient,
   DmutexRedisClient,
   DMutexLock,
@@ -13,6 +14,7 @@ import type {
 
 export type {
   BaseDMutexOptions,
+  DMutexBackend,
   DMutexLock,
   DMutexOptions,
   DmutexMongoClient,
@@ -47,9 +49,38 @@ const isRedisClient = (client: unknown): client is DmutexRedisClient => {
     (hasFunction(client, "set") && hasFunction(client, "eval"));
 }
 
-const detectBackend = (client: DmutexMongoClient | DmutexRedisClient) => {
+const detectBackend = (
+  client: DmutexMongoClient | DmutexRedisClient,
+  explicitBackend?: DMutexBackend,
+) => {
   const matchesMongo = isMongoClient(client);
   const matchesRedis = isRedisClient(client);
+
+  if (
+    explicitBackend !== undefined &&
+    explicitBackend !== "mongodb" &&
+    explicitBackend !== "redis"
+  ) {
+    throw new Error("dmutex backend must be either mongodb or redis");
+  }
+
+  if (explicitBackend === "mongodb") {
+    if (!matchesMongo) {
+      throw new Error(
+        "Cannot use MongoDB backend; client must provide MongoDB db()",
+      );
+    }
+    return "mongodb";
+  }
+
+  if (explicitBackend === "redis") {
+    if (!matchesRedis) {
+      throw new Error(
+        "Cannot use Redis backend; client must provide Redis sendCommand(args) or set(...args) plus eval(...args)",
+      );
+    }
+    return "redis";
+  }
 
   if (matchesMongo && !matchesRedis) {
     return "mongodb";
@@ -80,7 +111,7 @@ export class DMutex {
 
   constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: DMutexOptions = {}) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
-    const backend = detectBackend(client);
+    const backend = detectBackend(client, options.backend);
     this.store = backend === "redis"
       ? new RedisDMutexStore(serviceName, client as DmutexRedisClient, options as RedisDMutexOptions)
       : new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);
@@ -140,7 +171,7 @@ export class DMutex {
     }
 
     const released = await this.store.release(key, lockToken);
-    if (released && this.lockTokens.get(key) === lockToken) {
+    if (this.lockTokens.get(key) === lockToken) {
       this.lockTokens.delete(key);
     }
 

@@ -33,8 +33,11 @@ export type DmutexRedisMethodClient = {
 
 export type DmutexRedisClient = DmutexRedisCommandClient | DmutexRedisMethodClient
 
+export type DMutexBackend = "mongodb" | "redis"
+
 export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
+  backend?: DMutexBackend
 }
 
 export type MongoDMutexOptions = BaseDMutexOptions & {

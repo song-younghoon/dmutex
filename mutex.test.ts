@@ -2,7 +2,9 @@ import { test, expect, beforeAll, afterAll, describe } from "bun:test";
 import { MongoClient } from "mongodb";
 import { DMutex, type DmutexMongoCollectionDocument } from "./mutex";
 
-describe("DMutex", () => {
+const describeIntegration = process.env.DMUTEX_INTEGRATION === "1" ? describe : describe.skip;
+
+describeIntegration("DMutex MongoDB integration", () => {
   let mongoClient: MongoClient | undefined;
   let mutex: DMutex;
   const collectionName = `_dmutex_test-service_${process.pid}`;
