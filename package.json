@@ -34,12 +34,12 @@
   "scripts": {
     "build": "tsc",
     "test": "bun run test:unit",
-    "test:unit": "bun test mongo.test.ts redis.test.ts",
-    "test:integration": "DMUTEX_INTEGRATION=1 bun test mutex.test.ts redis.integration.test.ts",
-    "test:mongodb": "DMUTEX_INTEGRATION=1 bun test mutex.test.ts",
-    "test:redis": "DMUTEX_INTEGRATION=1 bun test redis.test.ts redis.integration.test.ts",
-    "test:redis:unit": "bun test redis.test.ts",
-    "test:redis:integration": "DMUTEX_INTEGRATION=1 bun test redis.integration.test.ts",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration",
+    "test:mongodb": "DMUTEX_INTEGRATION=1 bun test tests/integration/mongo.integration.test.ts",
+    "test:redis": "DMUTEX_INTEGRATION=1 bun test tests/unit/redis.test.ts tests/integration/redis.integration.test.ts",
+    "test:redis:unit": "bun test tests/unit/redis.test.ts",
+    "test:redis:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/redis.integration.test.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {

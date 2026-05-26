@@ -1,5 +1,5 @@
 import { test, expect, describe } from "bun:test";
-import { DMutex } from "./mutex";
+import { DMutex } from "../../src/mutex";
 
 type RedisEntry = {
   value: string

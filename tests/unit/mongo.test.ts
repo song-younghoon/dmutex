@@ -3,7 +3,7 @@ import {
   DMutex,
   type DmutexMongoCollection,
   type DmutexMongoCollectionDocument,
-} from "./mutex";
+} from "../../src/mutex";
 
 class FakeMongoCollection implements DmutexMongoCollection {
   public documents = new Map<string, DmutexMongoCollectionDocument>()

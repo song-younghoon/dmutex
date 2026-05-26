@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import Redis from "ioredis";
 import { createClient, type RedisClientType } from "redis";
-import { DMutex } from "./mutex";
+import { DMutex } from "../../src/mutex";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const clients: Array<{ close: () => Promise<unknown> }> = [];

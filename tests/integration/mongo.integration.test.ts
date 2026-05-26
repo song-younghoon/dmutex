@@ -1,6 +1,6 @@
 import { test, expect, beforeAll, afterAll, describe } from "bun:test";
 import { MongoClient } from "mongodb";
-import { DMutex, type DmutexMongoCollectionDocument } from "./mutex";
+import { DMutex, type DmutexMongoCollectionDocument } from "../../src/mutex";
 
 const describeIntegration = process.env.DMUTEX_INTEGRATION === "1" ? describe : describe.skip;
 

@@ -35,10 +35,10 @@ import { DMutex } from "dmutex";
 const mongoClient = new MongoClient("mongodb://localhost:27017");
 await mongoClient.connect();
 
-const mutex = new DMutex("my-service", mongoClient);
-await mutex.ready();
+const dmutex = new DMutex("my-service", mongoClient);
+await dmutex.ready();
 
-const lock = await mutex.acquire("job:daily-report", 60);
+const lock = await dmutex.acquire("job:daily-report", 60);
 
 if (!lock) {
   // Another process already holds this lock.
@@ -62,9 +62,9 @@ import { DMutex } from "dmutex";
 const redisClient = createClient({ url: "redis://localhost:6379" });
 await redisClient.connect();
 
-const mutex = new DMutex("my-service", redisClient);
+const dmutex = new DMutex("my-service", redisClient);
 
-const lock = await mutex.acquire("job:daily-report", 60);
+const lock = await dmutex.acquire("job:daily-report", 60);
 
 if (!lock) {
   // Another process already holds this lock.
@@ -105,7 +105,7 @@ MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by
 ### `ready()`
 
 ```ts
-await mutex.ready();
+await dmutex.ready();
 ```
 
 Waits for backend initialization. For MongoDB, this waits for the TTL index to be created. For Redis, this is a no-op. `acquire()`, `lock()`, `unlock()`, and `extend()` also wait for any required initialization internally, but calling `ready()` during application startup surfaces MongoDB initialization failures earlier.
@@ -113,7 +113,7 @@ Waits for backend initialization. For MongoDB, this waits for the TTL index to b
 ### `acquire(key, ttl?)`
 
 ```ts
-const lock = await mutex.acquire("some-key", 300);
+const lock = await dmutex.acquire("some-key", 300);
 
 if (lock) {
   try {
@@ -141,7 +141,7 @@ Attempts to acquire a lock for the given key.
 ### `lock(key, ttl?)`
 
 ```ts
-const acquired = await mutex.lock("some-key", 300);
+const acquired = await dmutex.lock("some-key", 300);
 ```
 
 Attempts to acquire a lock for the given key.
@@ -155,7 +155,7 @@ This is the legacy boolean-style API. New code should prefer `acquire()`, which 
 ### `unlock(key, token?)`
 
 ```ts
-await mutex.unlock("some-key");
+await dmutex.unlock("some-key");
 ```
 
 Deletes the lock for the given key. If `token` is provided, only a lock with the matching token is released. Locks acquired through `lock()` can be released with `unlock(key)` from the same `DMutex` instance because the instance keeps the internal token.
@@ -163,7 +163,7 @@ Deletes the lock for the given key. If `token` is provided, only a lock with the
 ### `extend(key, token, ttl?)`
 
 ```ts
-await mutex.extend("some-key", lock.token, 300);
+await dmutex.extend("some-key", lock.token, 300);
 ```
 
 Extends the TTL for an active lock with the matching token. Returns `true` on success, or `false` when the token does not match or the lock is already expired.
@@ -198,6 +198,15 @@ Install dependencies:
 
 ```bash
 bun install
+```
+
+Project layout:
+
+```text
+src/                 Runtime library source
+tests/unit/          Fast tests that do not require external services
+tests/integration/   MongoDB and Redis integration tests
+docs/                Project planning and maintenance notes
 ```
 
 Build:
