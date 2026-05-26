@@ -6,17 +6,57 @@ A small TypeScript distributed mutex library that can use MongoDB or Redis as it
 
 ## Installation
 
+Bun:
+
 ```bash
 bun add dmutex
+```
+
+Node.js with npm:
+
+```bash
+npm install dmutex
+```
+
+Node.js with pnpm:
+
+```bash
+pnpm add dmutex
+```
+
+Node.js with Yarn:
+
+```bash
+yarn add dmutex
 ```
 
 `dmutex` does not force a specific MongoDB or Redis client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
 
 If you use the official `mongodb`, `redis`, or `ioredis` packages, install the versions you want in your application.
 
+Bun:
+
 ```bash
 bun add mongodb
 bun add redis
+```
+
+Node.js with npm:
+
+```bash
+npm install mongodb redis
+```
+
+Node.js with pnpm:
+
+```bash
+pnpm add mongodb redis
+```
+
+Node.js with Yarn:
+
+```bash
+yarn add mongodb redis
 ```
 
 Redis compatibility is currently pinned with real package tests for:
@@ -140,6 +180,8 @@ Attempts to acquire a lock for the given key.
 
 ### `lock(key, ttl?)`
 
+Deprecated: use `acquire()` instead. `acquire()` returns a lock handle that carries its ownership token and is safer across async boundaries.
+
 ```ts
 const acquired = await dmutex.lock("some-key", 300);
 ```
@@ -153,6 +195,8 @@ Attempts to acquire a lock for the given key.
 This is the legacy boolean-style API. New code should prefer `acquire()`, which exposes ownership explicitly.
 
 ### `unlock(key, token?)`
+
+Deprecated: prefer `lock.release()` from the lock handle returned by `acquire()`. `unlock(key)` depends on token state stored in the same `DMutex` instance unless a token is provided.
 
 ```ts
 await dmutex.unlock("some-key");

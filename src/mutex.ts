@@ -139,6 +139,10 @@ export class DMutex {
     return expiredAt !== null;
   }
 
+  private releaseWithToken = async (key: string, token: string) => {
+    return await this.store.release(key, token);
+  }
+
   public acquire = async (key: string, ttl?: number): Promise<DMutexLock | null> => {
     const token = randomUUID();
     const expiredAt = await this.acquireWithToken(key, token, ttl);
@@ -150,11 +154,15 @@ export class DMutex {
       key,
       token,
       expiredAt,
-      release: async () => await this.unlock(key, token),
+      release: async () => await this.releaseWithToken(key, token),
       extend: async (nextTtl?: number) => await this.extend(key, token, nextTtl),
     };
   }
 
+  /**
+   * @deprecated Use acquire() instead. acquire() returns a lock handle that
+   * carries its ownership token and is safer across async boundaries.
+   */
   public lock = async (key: string, ttl?: number) => {
     const token = randomUUID();
     const locked = await this._setnx(key, token, ttl);
@@ -164,6 +172,10 @@ export class DMutex {
     return locked;
   }
 
+  /**
+   * @deprecated Prefer lock.release() from acquire(). unlock(key) depends on
+   * token state stored in this DMutex instance unless a token is provided.
+   */
   public unlock = async (key: string, token?: string) => {
     const lockToken = token ?? this.lockTokens.get(key);
     if (!lockToken) {
