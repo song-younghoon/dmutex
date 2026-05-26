@@ -22,6 +22,6 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["index.ts", "mutex.ts"],
+  "include": ["index.ts", "mutex.ts", "mongo-store.ts", "redis-store.ts", "store.ts", "types.ts"],
   "exclude": ["dist", "node_modules", "*.test.ts"]
 }

@@ -1,74 +1,49 @@
 import { randomUUID } from "crypto";
+import { MongoMutexStore } from "./mongo-store";
+import { RedisMutexStore } from "./redis-store";
+import type { MutexStore } from "./store";
+import type {
+  DmutexMongoClient,
+  DmutexRedisClient,
+  MongoMutexOptions,
+  MutexLock,
+  MutexOptions,
+  RedisMutexOptions,
+} from "./types";
 
-export type DmutexMongoCollectionDocument = {
-  _id: string
-  value: string
-  expiredAt: Date
-}
-
-export type DmutexMongoClient = {
-  db(name?: string): DmutexMongoDb
-}
-
-export type DmutexMongoDb = {
-  collection(name: string): DmutexMongoCollection
-}
-
-export type DmutexMongoCollection = {
-  createIndex(keys: Record<string, 1 | -1>, options: { expireAfterSeconds: number }): Promise<string>
-  insertOne(document: DmutexMongoCollectionDocument): Promise<unknown>
-  updateOne(
-    filter: Record<string, unknown>,
-    update: Record<string, unknown>,
-  ): Promise<{ matchedCount?: number }>
-  deleteOne(filter: Record<string, unknown>): Promise<{ deletedCount?: number }>
-}
-
-export type MutexOptions = {
-  dbName?: string
-  collectionName?: string
-  collectionPrefix?: string
-  defaultTtlSeconds?: number
-}
-
-export type MutexLock = {
-  key: string
-  token: string
-  expiredAt: Date
-  release: () => Promise<boolean>
-  extend: (ttl?: number) => Promise<boolean>
-}
+export type {
+  BaseMutexOptions,
+  DmutexMongoClient,
+  DmutexMongoCollection,
+  DmutexMongoCollectionDocument,
+  DmutexMongoDb,
+  DmutexRedisClient,
+  DmutexRedisCommandClient,
+  DmutexRedisMethodClient,
+  MongoMutexOptions,
+  MutexBackend,
+  MutexLock,
+  MutexOptions,
+  RedisMutexOptions,
+} from "./types";
 
 export class Mutex {
-  private serviceName: string
-  private mongoClient: DmutexMongoClient
   private defaultTtlSeconds: number
-
-  private mongoClientDb: DmutexMongoDb
-  private mongoClientCollection: DmutexMongoCollection
-  private indexReady: Promise<string>
+  private store: MutexStore
   private lockTokens = new Map<string, string>()
 
-  constructor(serviceName: string, mongoClient: DmutexMongoClient, options?: MutexOptions)
+  constructor(serviceName: string, client: DmutexMongoClient, options?: MongoMutexOptions)
+  constructor(serviceName: string, client: DmutexRedisClient, options: RedisMutexOptions)
 
-  constructor(serviceName: string, mongoClient: DmutexMongoClient, options: MutexOptions = {}) {
-    this.serviceName = serviceName;
-    this.mongoClient = mongoClient;
+  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: MutexOptions = {}) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
-
-    this.mongoClientDb = this.mongoClient.db(options.dbName ?? 'dmutex')
-    this.mongoClientCollection = this.mongoClientDb.collection(
-      options.collectionName ?? `${options.collectionPrefix ?? '_dmutex_'}${this.serviceName}`,
-    );
-
-    this.indexReady = this.mongoClientCollection.createIndex(
-      { expiredAt: 1 },
-      { expireAfterSeconds: 0 },
-    );
+    this.store = options.backend === "redis"
+      ? new RedisMutexStore(serviceName, client as DmutexRedisClient, options)
+      : new MongoMutexStore(serviceName, client as DmutexMongoClient, options);
   }
 
   public ready = async () => {
-    await this.indexReady;
+    await this.store.ready();
   }
 
   private getTtlSeconds = (ttl?: number) => {
@@ -79,41 +54,9 @@ export class Mutex {
     return ttlSeconds;
   }
 
-  private isDuplicateKeyError = (error: unknown) => {
-    return (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: unknown }).code === 11000
-    );
-  }
-
   private acquireWithToken = async (key: string, token: string, ttl?: number) => {
-    await this.ready();
-
     const ttlSeconds = this.getTtlSeconds(ttl);
-    const now = new Date();
-    const expiredAt = new Date(now.getTime() + (ttlSeconds * 1000));
-
-    try {
-      await this.mongoClientCollection.insertOne({
-        _id: key,
-        value: token,
-        expiredAt,
-      });
-      return expiredAt;
-    } catch (error) {
-      if (!this.isDuplicateKeyError(error)) {
-        throw error;
-      }
-    }
-
-    const replaced = await this.mongoClientCollection.updateOne(
-      { _id: key, expiredAt: { $lte: now } },
-      { $set: { value: token, expiredAt } },
-    );
-
-    return replaced.matchedCount === 1 ? expiredAt : null;
+    return await this.store.acquire(key, token, ttlSeconds);
   }
 
   private _setnx = async (key: string, value: string, ttl?: number) => {
@@ -147,33 +90,21 @@ export class Mutex {
   }
 
   public unlock = async (key: string, token?: string) => {
-    await this.ready();
-
     const lockToken = token ?? this.lockTokens.get(key);
     if (!lockToken) {
       return false;
     }
 
-    const result = await this.mongoClientCollection.deleteOne({ _id: key, value: lockToken });
-    if (result.deletedCount === 1 && this.lockTokens.get(key) === lockToken) {
+    const released = await this.store.release(key, lockToken);
+    if (released && this.lockTokens.get(key) === lockToken) {
       this.lockTokens.delete(key);
     }
 
-    return result.deletedCount === 1;
+    return released;
   }
 
   public extend = async (key: string, token: string, ttl?: number) => {
-    await this.ready();
-
     const ttlSeconds = this.getTtlSeconds(ttl);
-    const now = new Date();
-    const expiredAt = new Date(now.getTime() + (ttlSeconds * 1000));
-
-    const result = await this.mongoClientCollection.updateOne(
-      { _id: key, value: token, expiredAt: { $gt: now } },
-      { $set: { expiredAt } },
-    );
-
-    return result.matchedCount === 1;
+    return await this.store.extend(key, token, ttlSeconds);
   }
 }

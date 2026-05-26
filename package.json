@@ -1,6 +1,6 @@
 {
   "name": "dmutex",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,12 +21,18 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "bun test mutex.test.ts",
+    "test": "bun test *.test.ts",
+    "test:mongodb": "bun test mutex.test.ts",
+    "test:redis": "bun test redis.test.ts redis.integration.test.ts",
+    "test:redis:unit": "bun test redis.test.ts",
+    "test:redis:integration": "bun test redis.integration.test.ts",
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "ioredis": "^5.10.1",
     "mongodb": ">=4.0.0",
+    "redis": "^5.12.1",
     "typescript": "^5"
   }
 }

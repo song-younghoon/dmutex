@@ -63,34 +63,65 @@
 ### 7. Test environment
 
 - Status: Partially done
-- Problem: tests require MongoDB but fail by timeout when MongoDB is unavailable.
-- Improvement: either document a Docker/Testcontainers path or fail fast with a clear MongoDB connection error.
+- Problem: integration tests require MongoDB/Redis but should fail clearly when backing services are unavailable.
+- Improvement: either document a Docker/Testcontainers path or fail fast with clear MongoDB/Redis connection errors.
 - Acceptance criteria:
-  - Missing MongoDB produces an actionable failure.
+  - Missing MongoDB/Redis produces an actionable failure.
   - CI can run tests repeatably.
+
+### 8. Backend implementation organization
+
+- Status: Done
+- Problem: MongoDB, Redis, shared store contracts, and public API code in one file make future backend additions harder to review and maintain.
+- Improvement: split public types, store contract, MongoDB store, Redis store, and public `Mutex` API into separate runtime modules.
+- Acceptance criteria:
+  - `mutex.ts` focuses on the public `Mutex` API.
+  - Backend-specific code lives in backend-specific files.
+  - Published package still includes all runtime files needed by CommonJS consumers.
 
 ## P2 - API Ergonomics and Operations
 
-### 8. Driver-independent client contract
+### 9. Backend abstraction
+
+- Status: Done
+- Problem: the project goal is a common distributed-lock interface with selectable backends, but the implementation was tied directly to MongoDB operations.
+- Improvement: introduce internal storage adapters and keep `Mutex.acquire()`, `lock()`, `unlock()`, and `extend()` backend-neutral.
+- Acceptance criteria:
+  - Existing MongoDB constructor usage remains compatible.
+  - Redis can be selected through constructor options without changing lock call sites.
+  - Ownership-token release and renewal semantics are shared across backends.
+
+### 10. Redis backend
+
+- Status: Done
+- Problem: only MongoDB is supported.
+- Improvement: add a Redis backend using `SET key token PX ttl NX` for acquisition and Lua `EVAL` scripts for token-protected release/extension.
+- Acceptance criteria:
+  - Redis lock acquisition allows only one holder per key.
+  - Release and extension verify the lock token atomically.
+  - Runtime package does not depend on a specific Redis client package.
+  - `redis` and `ioredis` clients are covered by type and integration tests.
+
+### 11. Driver-independent client contract
 
 - Status: Done
 - Problem: using `mongodb` package types and peer dependencies makes the library appear locked to a specific driver version.
-- Improvement: use a small structural client interface and keep the official MongoDB driver only as a development/test dependency.
+- Improvement: use small structural client interfaces and keep official MongoDB/Redis clients outside runtime dependencies.
 - Acceptance criteria:
-  - Runtime package has no `mongodb` dependency or peer dependency.
-  - Public declarations do not import types from `mongodb`.
-  - Official `mongodb` clients remain compatible through structural typing.
+  - Runtime package has no `mongodb` or `redis` dependency or peer dependency.
+  - Public declarations do not import types from `mongodb` or `redis`.
+  - Official clients remain compatible through structural typing.
 
-### 9. Runtime options
+### 12. Runtime options
 
 - Status: Done
 - Problem: database name, collection naming, and default TTL are hardcoded.
-- Improvement: support constructor options for `dbName`, collection naming, and `defaultTtlSeconds`.
+- Improvement: support constructor options for MongoDB database/collection naming, Redis key prefixing, backend selection, and `defaultTtlSeconds`.
 - Acceptance criteria:
   - Existing constructor usage remains valid.
   - Advanced users can isolate databases/collections per environment.
 
-### 10. Renewal API
+### 13. Renewal API
 
 - Status: Done
 - Problem: long-running critical sections cannot extend ownership safely.
@@ -99,11 +130,11 @@
   - Only the current owner can extend a lock.
   - Expired locks cannot be extended by stale holders.
 
-### 11. Documentation updates
+### 14. Documentation updates
 
 - Status: Done
 - Problem: README explains the current limitation but should match the improved ownership and takeover behavior.
-- Improvement: document handle-based acquisition, safe release, legacy methods, TTL caveats, and MongoDB requirements.
+- Improvement: document handle-based acquisition, safe release, legacy methods, TTL caveats, and MongoDB/Redis requirements.
 - Acceptance criteria:
   - Examples use the safest API by default.
   - Operational caveats are explicit.
