@@ -139,3 +139,24 @@
 - Acceptance criteria:
   - Examples use the safest API by default.
   - Operational caveats are explicit.
+
+### 15. Timed retry acquisition
+
+- Status: Done
+- Problem: callers that can wait briefly for a busy lock must implement their own polling loop around `acquire()`.
+- Improvement: add `acquireWithRetry()` and `runWithRetry()` with bounded timeout and retry-delay options.
+- Acceptance criteria:
+  - Existing immediate-attempt APIs keep their current behavior.
+  - Waiting callers receive a lock when it becomes available before the timeout.
+  - Waiting callers receive `null` when the timeout elapses.
+  - Callback-based retry usage releases the lock in a `finally` block.
+
+### 16. Docker-backed integration test command
+
+- Status: Done
+- Problem: developers must manually coordinate MongoDB/Redis startup before running integration tests.
+- Improvement: add a package script that starts Docker Compose services, waits for healthchecks, runs integration tests, and tears services down.
+- Acceptance criteria:
+  - A single command can run the full integration suite against real MongoDB and Redis.
+  - Services are stopped when the command exits.
+  - Manual Docker Compose instructions remain available for debugging.

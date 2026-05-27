@@ -168,6 +168,29 @@ Attempts to acquire a lock, runs the callback while the lock is held, and releas
 
 If the callback throws, `run()` releases the lock and rethrows the callback error. `run()` does not automatically renew long-running locks; use the callback's `lock.extend(ttl)` when the protected work may run longer than the TTL.
 
+### `runWithRetry(key, callback, options?)`
+
+```ts
+const result = await dmutex.runWithRetry("some-key", async (lock) => {
+  return "done";
+}, {
+  ttl: 300,
+  timeoutMs: 10_000,
+  retryDelayMs: 100,
+});
+
+if (result === null) {
+  // The lock was not acquired before timeoutMs elapsed.
+}
+```
+
+Attempts to acquire a lock until it succeeds or `timeoutMs` elapses, then runs the callback and releases the lock in a `finally` block.
+
+- `options.ttl`: lock TTL in seconds. Defaults to 300 seconds.
+- `options.timeoutMs`: maximum time to wait. Defaults to 30,000 milliseconds.
+- `options.retryDelayMs`: delay between attempts. Defaults to 100 milliseconds.
+- returns: the callback result when the lock is acquired, or `null` when the timeout elapses
+
 ### `acquire(key, ttl?)`
 
 ```ts
@@ -188,11 +211,33 @@ Attempts to acquire a lock for the given key.
 - `ttl`: lock TTL in seconds. Defaults to 300 seconds.
 - returns: `DMutexLock` when the lock is acquired, or `null` when another holder already owns the key
 
+### `acquireWithRetry(key, options?)`
+
+```ts
+const lock = await dmutex.acquireWithRetry("some-key", {
+  ttl: 300,
+  timeoutMs: 10_000,
+  retryDelayMs: 100,
+});
+
+if (!lock) {
+  // The lock was not acquired before timeoutMs elapsed.
+}
+```
+
+Attempts to acquire a lock until it succeeds or `timeoutMs` elapses.
+
+- `key`: lock identifier
+- `options.ttl`: lock TTL in seconds. Defaults to 300 seconds.
+- `options.timeoutMs`: maximum time to wait. Defaults to 30,000 milliseconds.
+- `options.retryDelayMs`: delay between attempts. Defaults to 100 milliseconds.
+- returns: `DMutexLock` when the lock is acquired, or `null` when the timeout elapses
+
 `DMutexLock` contains:
 
 - `key`: lock key
 - `token`: ownership token
-- `expiredAt`: current lock expiration time
+- `expiredAt`: current lock expiration time, updated after a successful `lock.extend()`
 - `release()`: releases only the lock with the matching ownership token
 - `extend(ttl?)`: extends only the active lock with the matching ownership token
 
@@ -325,7 +370,15 @@ MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun run t
 
 ### Integration Tests with Docker Compose
 
-Start MongoDB and Redis:
+Run the integration suite with Docker Compose-managed MongoDB and Redis:
+
+```bash
+bun run test:integration:docker
+```
+
+This starts the services, waits for their healthchecks, runs the integration tests, and stops the services when the test command exits.
+
+To manage services manually, start MongoDB and Redis:
 
 ```bash
 docker compose up -d

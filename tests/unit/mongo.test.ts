@@ -128,6 +128,23 @@ describe("Mongo mutex backend unit", () => {
     expect(client.collection.documents.get("expired-key")?.value).toBe(secondLock!.token);
   });
 
+  test("updates the lock handle expiration after a successful extension", async () => {
+    const client = new FakeMongoClient();
+    const mutex = new DMutex("test-service", client);
+
+    const lock = await mutex.acquire("extend-key", 1);
+    expect(lock).not.toBeNull();
+    const originalExpiredAt = lock!.expiredAt.getTime();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(await lock!.extend(60)).toBe(true);
+    expect(lock!.expiredAt.getTime()).toBeGreaterThan(originalExpiredAt);
+    expect(client.collection.documents.get("extend-key")?.expiredAt.getTime()).toBe(
+      lock!.expiredAt.getTime(),
+    );
+  });
+
   test("rethrows unexpected insert errors", async () => {
     const client = new FakeMongoClient();
     const mutex = new DMutex("test-service", client);

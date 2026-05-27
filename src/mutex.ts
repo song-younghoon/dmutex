@@ -8,6 +8,7 @@ import type {
   DmutexRedisClient,
   DMutexLock,
   DMutexOptions,
+  DMutexWaitOptions,
   MongoDMutexOptions,
   RedisDMutexOptions,
 } from "./types";
@@ -17,6 +18,7 @@ export type {
   DMutexBackend,
   DMutexLock,
   DMutexOptions,
+  DMutexWaitOptions,
   DmutexMongoClient,
   DmutexMongoCollection,
   DmutexMongoCollectionDocument,
@@ -101,6 +103,13 @@ const detectBackend = (
   );
 }
 
+const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
+const DEFAULT_RETRY_DELAY_MS = 100;
+
+const sleep = async (ms: number) => {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class DMutex {
   private defaultTtlSeconds: number
   private store: DMutexStore
@@ -129,6 +138,25 @@ export class DMutex {
     return ttlSeconds;
   }
 
+  private getWaitOptions = (options: DMutexWaitOptions = {}) => {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
+    const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+      throw new RangeError("timeoutMs must be a non-negative finite number");
+    }
+
+    if (!Number.isFinite(retryDelayMs) || retryDelayMs <= 0) {
+      throw new RangeError("retryDelayMs must be a positive finite number");
+    }
+
+    return {
+      ttl: options.ttl,
+      timeoutMs,
+      retryDelayMs,
+    };
+  }
+
   private acquireWithToken = async (key: string, token: string, ttl?: number) => {
     const ttlSeconds = this.getTtlSeconds(ttl);
     return await this.store.acquire(key, token, ttlSeconds);
@@ -143,6 +171,11 @@ export class DMutex {
     return await this.store.release(key, token);
   }
 
+  private extendWithToken = async (key: string, token: string, ttl?: number) => {
+    const ttlSeconds = this.getTtlSeconds(ttl);
+    return await this.store.extend(key, token, ttlSeconds);
+  }
+
   public acquire = async (key: string, ttl?: number): Promise<DMutexLock | null> => {
     const token = randomUUID();
     const expiredAt = await this.acquireWithToken(key, token, ttl);
@@ -150,13 +183,23 @@ export class DMutex {
       return null;
     }
 
-    return {
+    const lock: DMutexLock = {
       key,
       token,
       expiredAt,
       release: async () => await this.releaseWithToken(key, token),
-      extend: async (nextTtl?: number) => await this.extend(key, token, nextTtl),
+      extend: async (nextTtl?: number) => {
+        const nextExpiredAt = await this.extendWithToken(key, token, nextTtl);
+        if (!nextExpiredAt) {
+          return false;
+        }
+
+        lock.expiredAt = nextExpiredAt;
+        return true;
+      },
     };
+
+    return lock;
   }
 
   public run = async <T>(
@@ -165,6 +208,45 @@ export class DMutex {
     ttl?: number,
   ): Promise<T | null> => {
     const lock = await this.acquire(key, ttl);
+    if (!lock) {
+      return null;
+    }
+
+    try {
+      return await callback(lock);
+    } finally {
+      await lock.release();
+    }
+  }
+
+  public acquireWithRetry = async (
+    key: string,
+    options: DMutexWaitOptions = {},
+  ): Promise<DMutexLock | null> => {
+    const { ttl, timeoutMs, retryDelayMs } = this.getWaitOptions(options);
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      const lock = await this.acquire(key, ttl);
+      if (lock) {
+        return lock;
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        return null;
+      }
+
+      await sleep(Math.min(retryDelayMs, remainingMs));
+    }
+  }
+
+  public runWithRetry = async <T>(
+    key: string,
+    callback: (lock: DMutexLock) => Promise<T> | T,
+    options: DMutexWaitOptions = {},
+  ): Promise<T | null> => {
+    const lock = await this.acquireWithRetry(key, options);
     if (!lock) {
       return null;
     }
@@ -208,7 +290,6 @@ export class DMutex {
   }
 
   public extend = async (key: string, token: string, ttl?: number) => {
-    const ttlSeconds = this.getTtlSeconds(ttl);
-    return await this.store.extend(key, token, ttlSeconds);
+    return (await this.extendWithToken(key, token, ttl)) !== null;
   }
 }

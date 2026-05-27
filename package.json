@@ -36,6 +36,7 @@
     "test": "bun run test:unit",
     "test:unit": "bun test tests/unit",
     "test:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration",
+    "test:integration:docker": "bash scripts/test-integration-docker.sh",
     "test:mongodb": "DMUTEX_INTEGRATION=1 bun test tests/integration/mongo.integration.test.ts",
     "test:redis": "DMUTEX_INTEGRATION=1 bun test tests/unit/redis.test.ts tests/integration/redis.integration.test.ts",
     "test:redis:unit": "bun test tests/unit/redis.test.ts",

@@ -118,6 +118,20 @@ describe("Redis mutex backend", () => {
     await nextLock!.release();
   });
 
+  test("should update the lock handle expiration after a successful extension", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const lock = await mutex.acquire("extend-expiration-key", 1);
+    expect(lock).not.toBeNull();
+    const originalExpiredAt = lock!.expiredAt.getTime();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(await lock!.extend(60)).toBe(true);
+    expect(lock!.expiredAt.getTime()).toBeGreaterThan(originalExpiredAt);
+  });
+
   test("should run a callback while holding a lock and release afterward", async () => {
     const redisClient = new FakeRedisClient();
     const mutex = new DMutex("test-service", redisClient);
@@ -143,6 +157,76 @@ describe("Redis mutex backend", () => {
     expect(result).toBeNull();
 
     await lock!.release();
+  });
+
+  test("should acquire with retry after a held lock is released", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const heldLock = await mutex.acquire("retry-key", 30);
+    expect(heldLock).not.toBeNull();
+
+    const releaseLater = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await heldLock!.release();
+    })();
+
+    const nextLock = await mutex.acquireWithRetry("retry-key", {
+      ttl: 30,
+      timeoutMs: 100,
+      retryDelayMs: 5,
+    });
+
+    await releaseLater;
+    expect(nextLock).not.toBeNull();
+    await nextLock!.release();
+  });
+
+  test("should return null when acquire retry times out", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const heldLock = await mutex.acquire("retry-timeout-key", 30);
+    expect(heldLock).not.toBeNull();
+
+    const nextLock = await mutex.acquireWithRetry("retry-timeout-key", {
+      timeoutMs: 15,
+      retryDelayMs: 5,
+    });
+
+    expect(nextLock).toBeNull();
+    await heldLock!.release();
+  });
+
+  test("should run a callback with retry and release afterward", async () => {
+    const redisClient = new FakeRedisClient();
+    const mutex = new DMutex("test-service", redisClient);
+
+    const heldLock = await mutex.acquire("run-retry-key", 30);
+    expect(heldLock).not.toBeNull();
+
+    const releaseLater = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await heldLock!.release();
+    })();
+
+    const result = await mutex.runWithRetry(
+      "run-retry-key",
+      async (lock) => {
+        expect(lock.key).toBe("run-retry-key");
+        return "retried";
+      },
+      {
+        timeoutMs: 100,
+        retryDelayMs: 5,
+      },
+    );
+
+    await releaseLater;
+    expect(result).toBe("retried");
+    const releasedLock = await mutex.acquire("run-retry-key", 30);
+    expect(releasedLock).not.toBeNull();
+    await releasedLock!.release();
   });
 
   test("should release the lock when run callback throws", async () => {
@@ -181,6 +265,12 @@ describe("Redis mutex backend", () => {
 
     await expect(mutex.lock("invalid-ttl", 0)).rejects.toThrow(RangeError);
     await expect(mutex.acquire("invalid-ttl", -1)).rejects.toThrow(RangeError);
+    await expect(
+      mutex.acquireWithRetry("invalid-wait", { timeoutMs: -1 }),
+    ).rejects.toThrow(RangeError);
+    await expect(
+      mutex.acquireWithRetry("invalid-wait", { retryDelayMs: 0 }),
+    ).rejects.toThrow(RangeError);
   });
 
   test("should reject clients that do not match a supported backend contract", () => {

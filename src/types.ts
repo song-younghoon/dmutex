@@ -52,6 +52,12 @@ export type RedisDMutexOptions = BaseDMutexOptions & {
 
 export type DMutexOptions = MongoDMutexOptions | RedisDMutexOptions
 
+export type DMutexWaitOptions = {
+  ttl?: number
+  timeoutMs?: number
+  retryDelayMs?: number
+}
+
 export type DMutexLock = {
   key: string
   token: string

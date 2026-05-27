@@ -79,6 +79,6 @@ export class MongoDMutexStore implements DMutexStore {
       { $set: { expiredAt } },
     );
 
-    return result.matchedCount === 1;
+    return result.matchedCount === 1 ? expiredAt : null;
   }
 }

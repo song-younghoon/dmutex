@@ -87,6 +87,7 @@ export class RedisDMutexStore implements DMutexStore {
 
   public extend = async (key: string, token: string, ttlSeconds: number) => {
     const ttlMs = Math.ceil(ttlSeconds * 1000);
+    const expiredAt = new Date(Date.now() + ttlMs);
     const result = await this.command([
       "EVAL",
       EXTEND_SCRIPT,
@@ -96,6 +97,6 @@ export class RedisDMutexStore implements DMutexStore {
       String(ttlMs),
     ]);
 
-    return toBooleanResult(result);
+    return toBooleanResult(result) ? expiredAt : null;
   }
 }
