@@ -1,8 +1,8 @@
 # dmutex
 
-A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, or DynamoDB as its backend.
+A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL as its backend.
 
-`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, or DynamoDB as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL as the implementation.
 
 `DSemaphore.acquire()` allows up to `maxPermits` callers to hold permits for a given key at the same time. Each permit also carries an ownership token and TTL.
 
@@ -32,9 +32,9 @@ Node.js with Yarn:
 yarn add dmutex
 ```
 
-`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, or DynamoDB client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
+`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
 
-If you use the official `mongodb`, `redis`, `ioredis`, `pg`, or `@aws-sdk/client-dynamodb` packages, install the versions you want in your application.
+If you use the official `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` packages, install the versions you want in your application.
 
 Bun:
 
@@ -43,24 +43,25 @@ bun add mongodb
 bun add redis
 bun add pg
 bun add @aws-sdk/client-dynamodb
+bun add mysql2
 ```
 
 Node.js with npm:
 
 ```bash
-npm install mongodb redis pg @aws-sdk/client-dynamodb
+npm install mongodb redis pg @aws-sdk/client-dynamodb mysql2
 ```
 
 Node.js with pnpm:
 
 ```bash
-pnpm add mongodb redis pg @aws-sdk/client-dynamodb
+pnpm add mongodb redis pg @aws-sdk/client-dynamodb mysql2
 ```
 
 Node.js with Yarn:
 
 ```bash
-yarn add mongodb redis pg @aws-sdk/client-dynamodb
+yarn add mongodb redis pg @aws-sdk/client-dynamodb mysql2
 ```
 
 Redis compatibility is currently pinned with real package tests for:
@@ -75,6 +76,10 @@ PostgreSQL compatibility is currently pinned with real package tests for:
 DynamoDB compatibility is currently pinned with real package tests for:
 
 - `@aws-sdk/client-dynamodb`: use a small wrapper that exposes `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`
+
+MySQL compatibility is currently pinned with real package tests for:
+
+- `mysql2/promise`: uses the `execute(sql, values)` path
 
 ## Usage
 
@@ -194,6 +199,32 @@ if (result === null) {
 dynamoDB.destroy();
 ```
 
+### MySQL
+
+```ts
+import mysql from "mysql2/promise";
+import { DMutex } from "dmutex";
+
+const mysqlPool = mysql.createPool("mysql://root:mysql@localhost:3306/dmutex");
+
+const dmutex = new DMutex("my-service", mysqlPool, {
+  backend: "mysql",
+});
+await dmutex.ready();
+
+const result = await dmutex.run("job:daily-report", async () => {
+  // Run protected work.
+  return "done";
+}, 60);
+
+if (result === null) {
+  // Another process already holds this lock.
+  process.exit(0);
+}
+
+await mysqlPool.end();
+```
+
 ### Semaphore
 
 ```ts
@@ -228,7 +259,7 @@ Creates a mutex instance for a service.
 - `serviceName`: service identifier used for backend-specific namespacing
 - `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
-- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, or `dynamodb`. Use this when a wrapped client matches more than one backend contract.
+- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, or `mysql`. Use this when a wrapped client matches more than one backend contract.
 
 MongoDB options:
 
@@ -254,9 +285,16 @@ DynamoDB options:
 - `options.readyTimeoutMs`: maximum time to wait for the table to become active. Defaults to 30,000 milliseconds.
 - `options.readyPollIntervalMs`: delay between table readiness checks. Defaults to 250 milliseconds.
 
+MySQL options:
+
+- `options.databaseName`: optional database name. Defaults to the client's current database.
+- `options.tableName`: table name. If set, this takes precedence over `tablePrefix` and `serviceName`.
+- `options.tablePrefix`: table prefix. Defaults to `_dmutex_`.
+
 MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys under the `_dmutex_${serviceName}:` prefix by default. Backend keys include internal permit-slot names.
 PostgreSQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 DynamoDB uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
+MySQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 
 ### `ready()`
 
@@ -484,18 +522,25 @@ DynamoDB:
 - Release and extension use conditional `DeleteItem` or `UpdateItem` calls that verify the ownership token.
 - DynamoDB TTL cleanup is not required for correctness. Expired items do not block acquisition because each acquisition checks expiration and can atomically take over the item.
 
+MySQL:
+
+- Permit-slot acquisition uses `INSERT ... ON DUPLICATE KEY UPDATE` and only replaces an existing row when `expired_at <= now`.
+- Release and extension verify the token in `DELETE` or `UPDATE` predicates.
+- MySQL does not automatically delete expired rows. Expired rows do not block acquisition because each acquisition checks expiration and can atomically take over the row.
+
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - `DMutex` is backed by `DSemaphore` with `maxPermits: 1`.
 - `DSemaphore` is implemented as a fixed set of token-protected internal permit slots. Use the same `maxPermits` for all callers coordinating on the same semaphore key.
-- The package does not import `mongodb`, `redis`, `ioredis`, `pg`, or `@aws-sdk/client-dynamodb` at runtime. Client implementations are injected by the application.
-- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`.
+- The package does not import `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` at runtime. Client implementations are injected by the application.
+- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`. MySQL clients must expose `execute(sql, values)`.
 - A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
 - PostgreSQL clients must provide `query(text, values)`.
 - DynamoDB clients must provide `createTable`, `describeTable`, `putItem`, `deleteItem`, and `updateItem`.
+- MySQL clients must provide `execute(sql, values)`.
 
 ## Development
 
@@ -526,7 +571,7 @@ Run the default test suite:
 bun run test
 ```
 
-This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, or DynamoDB.
+This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL.
 
 Running `bun test` directly is also safe: integration tests are skipped unless `DMUTEX_INTEGRATION=1` is set.
 
@@ -554,6 +599,12 @@ Run only DynamoDB adapter unit tests:
 bun run test:dynamodb:unit
 ```
 
+Run only MySQL adapter unit tests:
+
+```bash
+bun run test:mysql:unit
+```
+
 Run only real `redis` and `ioredis` client integration tests:
 
 ```bash
@@ -572,6 +623,12 @@ Run only real DynamoDB Local integration tests:
 bun run test:dynamodb:integration
 ```
 
+Run only real `mysql2` client integration tests:
+
+```bash
+bun run test:mysql:integration
+```
+
 Run only MongoDB integration tests:
 
 ```bash
@@ -584,15 +641,15 @@ Run all integration tests:
 bun run test:integration
 ```
 
-The integration suite requires MongoDB, Redis, PostgreSQL, and DynamoDB Local. The default MongoDB URL is `mongodb://localhost:27017`, the default Redis URL is `redis://localhost:6379`, the default PostgreSQL URL is `postgres://postgres:postgres@localhost:5432/postgres`, and the default DynamoDB endpoint is `http://localhost:8000`. Set `MONGODB_URL`, `REDIS_URL`, `POSTGRES_URL`, and `DYNAMODB_ENDPOINT` to use different endpoints.
+The integration suite requires MongoDB, Redis, PostgreSQL, DynamoDB Local, and MySQL. The default MongoDB URL is `mongodb://localhost:27017`, the default Redis URL is `redis://localhost:6379`, the default PostgreSQL URL is `postgres://postgres:postgres@localhost:5432/postgres`, the default DynamoDB endpoint is `http://localhost:8000`, and the default MySQL URL is `mysql://root:mysql@localhost:3306/dmutex`. Set `MONGODB_URL`, `REDIS_URL`, `POSTGRES_URL`, `DYNAMODB_ENDPOINT`, and `MYSQL_URL` to use different endpoints.
 
 ```bash
-MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres DYNAMODB_ENDPOINT=http://localhost:8000 bun run test:integration
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres DYNAMODB_ENDPOINT=http://localhost:8000 MYSQL_URL=mysql://root:mysql@localhost:3306/dmutex bun run test:integration
 ```
 
 ### Integration Tests with Docker Compose
 
-Run the integration suite with Docker Compose-managed MongoDB, Redis, PostgreSQL, and DynamoDB Local:
+Run the integration suite with Docker Compose-managed MongoDB, Redis, PostgreSQL, DynamoDB Local, and MySQL:
 
 ```bash
 bun run test:integration:docker
@@ -601,12 +658,13 @@ bun run test:integration:docker
 This starts the services, waits for their healthchecks, runs the integration tests, and stops the services when the test command exits.
 If local port `5432` is already in use, set `POSTGRES_PORT` and the script will pass the matching `POSTGRES_URL` to the integration suite.
 If local port `8000` is already in use, set `DYNAMODB_PORT` and the script will pass the matching `DYNAMODB_ENDPOINT` to the integration suite.
+If local port `3306` is already in use, set `MYSQL_PORT` and the script will pass the matching `MYSQL_URL` to the integration suite.
 
 ```bash
-POSTGRES_PORT=5433 DYNAMODB_PORT=8001 bun run test:integration:docker
+POSTGRES_PORT=5433 DYNAMODB_PORT=8001 MYSQL_PORT=3307 bun run test:integration:docker
 ```
 
-To manage services manually, start MongoDB, Redis, PostgreSQL, and DynamoDB Local:
+To manage services manually, start MongoDB, Redis, PostgreSQL, DynamoDB Local, and MySQL:
 
 ```bash
 docker compose up -d
@@ -615,7 +673,7 @@ docker compose up -d
 Run the integration suite against those services:
 
 ```bash
-MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres DYNAMODB_ENDPOINT=http://localhost:8000 bun run test:integration
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres DYNAMODB_ENDPOINT=http://localhost:8000 MYSQL_URL=mysql://root:mysql@localhost:3306/dmutex bun run test:integration
 ```
 
 Stop the services:

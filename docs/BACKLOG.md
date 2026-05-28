@@ -170,7 +170,7 @@
 - Improvement: expand backend support in the following order:
   1. PostgreSQL - Done
   2. DynamoDB - Done
-  3. MySQL - Planned
+  3. MySQL - Done
   4. Cloudflare D1 - Planned
   5. Firestore - Planned
 - Acceptance criteria:

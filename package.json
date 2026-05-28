@@ -28,6 +28,7 @@
     "semaphore",
     "mongodb",
     "dynamodb",
+    "mysql",
     "postgresql",
     "redis",
     "typescript"
@@ -45,6 +46,9 @@
     "test:dynamodb:unit": "bun test tests/unit/dynamodb.test.ts",
     "test:dynamodb:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/dynamodb.integration.test.ts",
     "test:mongodb": "DMUTEX_INTEGRATION=1 bun test tests/integration/mongo.integration.test.ts",
+    "test:mysql": "DMUTEX_INTEGRATION=1 bun test tests/unit/mysql.test.ts tests/integration/mysql.integration.test.ts",
+    "test:mysql:unit": "bun test tests/unit/mysql.test.ts",
+    "test:mysql:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/mysql.integration.test.ts",
     "test:postgres": "DMUTEX_INTEGRATION=1 bun test tests/unit/postgres.test.ts tests/integration/postgres.integration.test.ts",
     "test:postgres:unit": "bun test tests/unit/postgres.test.ts",
     "test:postgres:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/postgres.integration.test.ts",
@@ -58,6 +62,7 @@
     "@types/bun": "latest",
     "ioredis": "^5.10.1",
     "mongodb": ">=4.0.0",
+    "mysql2": "^3.22.4",
     "pg": "^8.21.0",
     "redis": "^5.12.1",
     "typescript": "^5"

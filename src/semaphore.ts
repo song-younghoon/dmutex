@@ -4,6 +4,7 @@ import type { DMutexStore } from "./store";
 import type {
   DmutexDynamoDBClient,
   DmutexMongoClient,
+  DmutexMySQLClient,
   DmutexPostgresClient,
   DmutexRedisClient,
   DMutexOptions,
@@ -12,6 +13,7 @@ import type {
   DSemaphorePermit,
   DSemaphoreWaitOptions,
   MongoDSemaphoreOptions,
+  MySQLDSemaphoreOptions,
   PostgresDSemaphoreOptions,
   RedisDSemaphoreOptions,
 } from "./types";
@@ -23,6 +25,7 @@ export type {
   DSemaphorePermit,
   DSemaphoreWaitOptions,
   MongoDSemaphoreOptions,
+  MySQLDSemaphoreOptions,
   PostgresDSemaphoreOptions,
   RedisDSemaphoreOptions,
 } from "./types";
@@ -43,15 +46,26 @@ export class DSemaphore {
   constructor(serviceName: string, client: DmutexRedisClient, options: RedisDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexPostgresClient, options: PostgresDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexDynamoDBClient, options: DynamoDBDSemaphoreOptions)
+  constructor(serviceName: string, client: DmutexMySQLClient, options: MySQLDSemaphoreOptions)
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
+    client:
+      | DmutexMongoClient
+      | DmutexRedisClient
+      | DmutexPostgresClient
+      | DmutexDynamoDBClient
+      | DmutexMySQLClient,
     options: DSemaphoreOptions,
   )
 
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
+    client:
+      | DmutexMongoClient
+      | DmutexRedisClient
+      | DmutexPostgresClient
+      | DmutexDynamoDBClient
+      | DmutexMySQLClient,
     options: DSemaphoreOptions,
   ) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
