@@ -284,7 +284,7 @@ describe("Redis mutex backend", () => {
     };
 
     expect(() => new DMutex("test-service", ambiguousClient as any)).toThrow(
-      "matches both MongoDB and Redis contracts",
+      "matches multiple backend contracts",
     );
   });
 

@@ -165,14 +165,14 @@
 
 ### 17. Additional store adapter roadmap
 
-- Status: Planned
+- Status: In progress
 - Problem: applications that already depend on stores other than MongoDB or Redis cannot use `dmutex` without introducing a new infrastructure dependency.
 - Improvement: expand backend support in the following order:
-  1. PostgreSQL
-  2. DynamoDB
-  3. MySQL
-  4. Cloudflare D1
-  5. Firestore
+  1. PostgreSQL - Done
+  2. DynamoDB - Planned
+  3. MySQL - Planned
+  4. Cloudflare D1 - Planned
+  5. Firestore - Planned
 - Acceptance criteria:
   - Each adapter preserves the existing token-protected acquire, release, and extend semantics.
   - Each adapter supports bounded TTL behavior and expired-lock takeover without relying solely on asynchronous cleanup.

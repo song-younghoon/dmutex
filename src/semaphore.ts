@@ -3,12 +3,14 @@ import { createDMutexStore } from "./backend";
 import type { DMutexStore } from "./store";
 import type {
   DmutexMongoClient,
+  DmutexPostgresClient,
   DmutexRedisClient,
   DMutexOptions,
   DSemaphoreOptions,
   DSemaphorePermit,
   DSemaphoreWaitOptions,
   MongoDSemaphoreOptions,
+  PostgresDSemaphoreOptions,
   RedisDSemaphoreOptions,
 } from "./types";
 
@@ -18,6 +20,7 @@ export type {
   DSemaphorePermit,
   DSemaphoreWaitOptions,
   MongoDSemaphoreOptions,
+  PostgresDSemaphoreOptions,
   RedisDSemaphoreOptions,
 } from "./types";
 
@@ -35,9 +38,18 @@ export class DSemaphore {
 
   constructor(serviceName: string, client: DmutexMongoClient, options: MongoDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexRedisClient, options: RedisDSemaphoreOptions)
-  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: DSemaphoreOptions)
+  constructor(serviceName: string, client: DmutexPostgresClient, options: PostgresDSemaphoreOptions)
+  constructor(
+    serviceName: string,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    options: DSemaphoreOptions,
+  )
 
-  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: DSemaphoreOptions) {
+  constructor(
+    serviceName: string,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    options: DSemaphoreOptions,
+  ) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
     this.maxPermits = this.getMaxPermits(options.maxPermits);
     this.store = createDMutexStore(serviceName, client, this.getStoreOptions(serviceName, options));
@@ -60,11 +72,13 @@ export class DSemaphore {
       maxPermits?: number
       collectionPrefix?: string
       keyPrefix?: string
+      tablePrefix?: string
     };
 
     delete storeOptions.maxPermits;
     storeOptions.collectionPrefix ??= "_dsemaphore_";
     storeOptions.keyPrefix ??= `_dsemaphore_${serviceName}:`;
+    storeOptions.tablePrefix ??= "_dsemaphore_";
 
     return storeOptions;
   }

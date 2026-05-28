@@ -33,7 +33,19 @@ export type DmutexRedisMethodClient = {
 
 export type DmutexRedisClient = DmutexRedisCommandClient | DmutexRedisMethodClient
 
-export type DMutexBackend = "mongodb" | "redis"
+export type DmutexPostgresQueryResult<Row = Record<string, unknown>> = {
+  rowCount?: number | null
+  rows: Row[]
+}
+
+export type DmutexPostgresClient = {
+  query<Row = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ): Promise<DmutexPostgresQueryResult<Row>> | DmutexPostgresQueryResult<Row>
+}
+
+export type DMutexBackend = "mongodb" | "redis" | "postgresql"
 
 export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
@@ -50,7 +62,13 @@ export type RedisDMutexOptions = BaseDMutexOptions & {
   keyPrefix?: string
 }
 
-export type DMutexOptions = MongoDMutexOptions | RedisDMutexOptions
+export type PostgresDMutexOptions = BaseDMutexOptions & {
+  schemaName?: string
+  tableName?: string
+  tablePrefix?: string
+}
+
+export type DMutexOptions = MongoDMutexOptions | RedisDMutexOptions | PostgresDMutexOptions
 
 export type DMutexWaitOptions = {
   ttl?: number
@@ -74,7 +92,9 @@ export type MongoDSemaphoreOptions = MongoDMutexOptions & BaseDSemaphoreOptions
 
 export type RedisDSemaphoreOptions = RedisDMutexOptions & BaseDSemaphoreOptions
 
-export type DSemaphoreOptions = MongoDSemaphoreOptions | RedisDSemaphoreOptions
+export type PostgresDSemaphoreOptions = PostgresDMutexOptions & BaseDSemaphoreOptions
+
+export type DSemaphoreOptions = MongoDSemaphoreOptions | RedisDSemaphoreOptions | PostgresDSemaphoreOptions
 
 export type DSemaphoreWaitOptions = DMutexWaitOptions
 

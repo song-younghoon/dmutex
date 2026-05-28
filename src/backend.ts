@@ -1,12 +1,15 @@
 import { MongoDMutexStore } from "./mongo-store";
+import { PostgresDMutexStore } from "./postgres-store";
 import { RedisDMutexStore } from "./redis-store";
 import type { DMutexStore } from "./store";
 import type {
   DMutexBackend,
   DmutexMongoClient,
+  DmutexPostgresClient,
   DmutexRedisClient,
   DMutexOptions,
   MongoDMutexOptions,
+  PostgresDMutexOptions,
   RedisDMutexOptions,
 } from "./types";
 
@@ -31,19 +34,25 @@ const isRedisClient = (client: unknown): client is DmutexRedisClient => {
     (hasFunction(client, "set") && hasFunction(client, "eval"));
 }
 
+const isPostgresClient = (client: unknown): client is DmutexPostgresClient => {
+  return hasFunction(client, "query");
+}
+
 const detectBackend = (
-  client: DmutexMongoClient | DmutexRedisClient,
+  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
   explicitBackend?: DMutexBackend,
-) => {
+) : DMutexBackend => {
   const matchesMongo = isMongoClient(client);
   const matchesRedis = isRedisClient(client);
+  const matchesPostgres = isPostgresClient(client);
 
   if (
     explicitBackend !== undefined &&
     explicitBackend !== "mongodb" &&
-    explicitBackend !== "redis"
+    explicitBackend !== "redis" &&
+    explicitBackend !== "postgresql"
   ) {
-    throw new Error("dmutex backend must be either mongodb or redis");
+    throw new Error("dmutex backend must be mongodb, redis, or postgresql");
   }
 
   if (explicitBackend === "mongodb") {
@@ -64,32 +73,53 @@ const detectBackend = (
     return "redis";
   }
 
-  if (matchesMongo && !matchesRedis) {
-    return "mongodb";
+  if (explicitBackend === "postgresql") {
+    if (!matchesPostgres) {
+      throw new Error(
+        "Cannot use PostgreSQL backend; client must provide query(text, values)",
+      );
+    }
+    return "postgresql";
   }
 
-  if (matchesRedis && !matchesMongo) {
-    return "redis";
+  const matchingBackends: DMutexBackend[] = [];
+  if (matchesMongo) {
+    matchingBackends.push("mongodb");
+  }
+  if (matchesRedis) {
+    matchingBackends.push("redis");
+  }
+  if (matchesPostgres) {
+    matchingBackends.push("postgresql");
   }
 
-  if (matchesMongo && matchesRedis) {
+  if (matchingBackends.length === 1) {
+    return matchingBackends[0]!;
+  }
+
+  if (matchingBackends.length > 1) {
     throw new Error(
-      "Cannot detect dmutex backend because the client matches both MongoDB and Redis contracts",
+      "Cannot detect dmutex backend because the client matches multiple backend contracts",
     );
   }
 
   throw new Error(
-    "Cannot detect dmutex backend; client must provide MongoDB db() or Redis sendCommand(args) / set(...args) plus eval(...args)",
+    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), or PostgreSQL query(text, values)",
   );
 }
 
 export const createDMutexStore = (
   serviceName: string,
-  client: DmutexMongoClient | DmutexRedisClient,
+  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
   options: DMutexOptions,
 ): DMutexStore => {
   const backend = detectBackend(client, options.backend);
-  return backend === "redis"
-    ? new RedisDMutexStore(serviceName, client as DmutexRedisClient, options as RedisDMutexOptions)
-    : new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);
+  if (backend === "redis") {
+    return new RedisDMutexStore(serviceName, client as DmutexRedisClient, options as RedisDMutexOptions);
+  }
+  if (backend === "postgresql") {
+    return new PostgresDMutexStore(serviceName, client as DmutexPostgresClient, options as PostgresDMutexOptions);
+  }
+
+  return new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);
 }

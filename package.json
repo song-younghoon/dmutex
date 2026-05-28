@@ -1,7 +1,7 @@
 {
   "name": "dmutex",
   "version": "0.3.0",
-  "description": "A small TypeScript distributed mutex and semaphore library for MongoDB and Redis.",
+  "description": "A small TypeScript distributed mutex and semaphore library for MongoDB, Redis, and PostgreSQL.",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,6 +27,7 @@
     "mutex",
     "semaphore",
     "mongodb",
+    "postgresql",
     "redis",
     "typescript"
   ],
@@ -40,6 +41,9 @@
     "test:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration",
     "test:integration:docker": "bash scripts/test-integration-docker.sh",
     "test:mongodb": "DMUTEX_INTEGRATION=1 bun test tests/integration/mongo.integration.test.ts",
+    "test:postgres": "DMUTEX_INTEGRATION=1 bun test tests/unit/postgres.test.ts tests/integration/postgres.integration.test.ts",
+    "test:postgres:unit": "bun test tests/unit/postgres.test.ts",
+    "test:postgres:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/postgres.integration.test.ts",
     "test:redis": "DMUTEX_INTEGRATION=1 bun test tests/unit/redis.test.ts tests/integration/redis.integration.test.ts",
     "test:redis:unit": "bun test tests/unit/redis.test.ts",
     "test:redis:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/redis.integration.test.ts",
@@ -49,6 +53,7 @@
     "@types/bun": "latest",
     "ioredis": "^5.10.1",
     "mongodb": ">=4.0.0",
+    "pg": "^8.21.0",
     "redis": "^5.12.1",
     "typescript": "^5"
   }

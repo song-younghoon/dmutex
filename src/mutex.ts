@@ -7,7 +7,9 @@ import type {
   DMutexWaitOptions,
   DSemaphoreOptions,
   DSemaphorePermit,
+  DmutexPostgresClient,
   MongoDMutexOptions,
+  PostgresDMutexOptions,
   RedisDMutexOptions,
 } from "./types";
 
@@ -21,10 +23,13 @@ export type {
   DmutexMongoCollection,
   DmutexMongoCollectionDocument,
   DmutexMongoDb,
+  DmutexPostgresClient,
+  DmutexPostgresQueryResult,
   DmutexRedisClient,
   DmutexRedisCommandClient,
   DmutexRedisMethodClient,
   MongoDMutexOptions,
+  PostgresDMutexOptions,
   RedisDMutexOptions,
 } from "./types";
 
@@ -34,9 +39,18 @@ export class DMutex {
 
   constructor(serviceName: string, client: DmutexMongoClient, options?: MongoDMutexOptions)
   constructor(serviceName: string, client: DmutexRedisClient, options?: RedisDMutexOptions)
-  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options?: DMutexOptions)
+  constructor(serviceName: string, client: DmutexPostgresClient, options?: PostgresDMutexOptions)
+  constructor(
+    serviceName: string,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    options?: DMutexOptions,
+  )
 
-  constructor(serviceName: string, client: DmutexMongoClient | DmutexRedisClient, options: DMutexOptions = {}) {
+  constructor(
+    serviceName: string,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    options: DMutexOptions = {},
+  ) {
     this.semaphore = new DSemaphore(serviceName, client, this.getSemaphoreOptions(serviceName, options));
   }
 
@@ -48,10 +62,12 @@ export class DMutex {
     const semaphoreOptions = { ...options, maxPermits: 1 } as DSemaphoreOptions & {
       collectionPrefix?: string
       keyPrefix?: string
+      tablePrefix?: string
     };
 
     semaphoreOptions.collectionPrefix ??= "_dmutex_";
     semaphoreOptions.keyPrefix ??= `_dmutex_${serviceName}:`;
+    semaphoreOptions.tablePrefix ??= "_dmutex_";
 
     return semaphoreOptions;
   }

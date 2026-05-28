@@ -1,8 +1,8 @@
 # dmutex
 
-A small TypeScript distributed mutex and semaphore library that can use MongoDB or Redis as its backend.
+A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, or PostgreSQL as its backend.
 
-`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing either MongoDB or Redis as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, or PostgreSQL as the implementation.
 
 `DSemaphore.acquire()` allows up to `maxPermits` callers to hold permits for a given key at the same time. Each permit also carries an ownership token and TTL.
 
@@ -32,39 +32,44 @@ Node.js with Yarn:
 yarn add dmutex
 ```
 
-`dmutex` does not force a specific MongoDB or Redis client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
+`dmutex` does not force a specific MongoDB, Redis, or PostgreSQL client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
 
-If you use the official `mongodb`, `redis`, or `ioredis` packages, install the versions you want in your application.
+If you use the official `mongodb`, `redis`, `ioredis`, or `pg` packages, install the versions you want in your application.
 
 Bun:
 
 ```bash
 bun add mongodb
 bun add redis
+bun add pg
 ```
 
 Node.js with npm:
 
 ```bash
-npm install mongodb redis
+npm install mongodb redis pg
 ```
 
 Node.js with pnpm:
 
 ```bash
-pnpm add mongodb redis
+pnpm add mongodb redis pg
 ```
 
 Node.js with Yarn:
 
 ```bash
-yarn add mongodb redis
+yarn add mongodb redis pg
 ```
 
 Redis compatibility is currently pinned with real package tests for:
 
 - `redis` / `@redis/client`: uses the `sendCommand(args)` path
 - `ioredis`: uses the `set(...args)` / `eval(...args)` path
+
+PostgreSQL compatibility is currently pinned with real package tests for:
+
+- `pg`: uses the `query(text, values)` path
 
 ## Usage
 
@@ -117,6 +122,34 @@ if (result === null) {
 await redisClient.close();
 ```
 
+### PostgreSQL
+
+```ts
+import { Pool } from "pg";
+import { DMutex } from "dmutex";
+
+const postgresPool = new Pool({
+  connectionString: "postgres://postgres:postgres@localhost:5432/postgres",
+});
+
+const dmutex = new DMutex("my-service", postgresPool, {
+  backend: "postgresql",
+});
+await dmutex.ready();
+
+const result = await dmutex.run("job:daily-report", async () => {
+  // Run protected work.
+  return "done";
+}, 60);
+
+if (result === null) {
+  // Another process already holds this lock.
+  process.exit(0);
+}
+
+await postgresPool.end();
+```
+
 ### Semaphore
 
 ```ts
@@ -151,7 +184,7 @@ Creates a mutex instance for a service.
 - `serviceName`: service identifier used for backend-specific namespacing
 - `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
-- `options.backend`: optional explicit backend override, either `mongodb` or `redis`. Use this when a wrapped client matches more than one backend contract.
+- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, or `postgresql`. Use this when a wrapped client matches more than one backend contract.
 
 MongoDB options:
 
@@ -163,7 +196,14 @@ Redis options:
 
 - `options.keyPrefix`: Redis key prefix. Defaults to `_dmutex_${serviceName}:`.
 
+PostgreSQL options:
+
+- `options.schemaName`: optional table schema. Defaults to the client's current schema.
+- `options.tableName`: table name. If set, this takes precedence over `tablePrefix` and `serviceName`.
+- `options.tablePrefix`: table prefix. Defaults to `_dmutex_`.
+
 MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys under the `_dmutex_${serviceName}:` prefix by default. Backend keys include internal permit-slot names.
+PostgreSQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 
 ### `ready()`
 
@@ -379,16 +419,23 @@ Redis:
 - Release and extension use Lua `EVAL` scripts to verify the token and run `DEL` or `PEXPIRE` atomically.
 - `DMutexLock.expiredAt` and `DSemaphorePermit.expiredAt` are calculated with the client clock. Actual expiration is enforced by Redis TTL.
 
+PostgreSQL:
+
+- Permit-slot acquisition uses `INSERT ... ON CONFLICT ... DO UPDATE` and only takes over an existing row when `expired_at <= NOW()`.
+- Release and extension verify the token in `DELETE` or `UPDATE` predicates.
+- PostgreSQL does not automatically delete expired rows. Expired rows do not block acquisition because each acquisition checks expiration and can atomically take over the row.
+
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - `DMutex` is backed by `DSemaphore` with `maxPermits: 1`.
 - `DSemaphore` is implemented as a fixed set of token-protected internal permit slots. Use the same `maxPermits` for all callers coordinating on the same semaphore key.
-- The package does not import `mongodb`, `redis`, or `ioredis` at runtime. Client implementations are injected by the application.
-- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`.
+- The package does not import `mongodb`, `redis`, `ioredis`, or `pg` at runtime. Client implementations are injected by the application.
+- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`.
 - A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
+- PostgreSQL clients must provide `query(text, values)`.
 
 ## Development
 
@@ -419,7 +466,7 @@ Run the default test suite:
 bun run test
 ```
 
-This runs the fast unit suite only and does not require MongoDB or Redis.
+This runs the fast unit suite only and does not require MongoDB, Redis, or PostgreSQL.
 
 Running `bun test` directly is also safe: integration tests are skipped unless `DMUTEX_INTEGRATION=1` is set.
 
@@ -435,10 +482,22 @@ Run only Redis adapter unit tests:
 bun run test:redis:unit
 ```
 
+Run only PostgreSQL adapter unit tests:
+
+```bash
+bun run test:postgres:unit
+```
+
 Run only real `redis` and `ioredis` client integration tests:
 
 ```bash
 bun run test:redis:integration
+```
+
+Run only real `pg` client integration tests:
+
+```bash
+bun run test:postgres:integration
 ```
 
 Run only MongoDB integration tests:
@@ -453,23 +512,28 @@ Run all integration tests:
 bun run test:integration
 ```
 
-The integration suite requires MongoDB and Redis. The default MongoDB URL is `mongodb://localhost:27017`, and the default Redis URL is `redis://localhost:6379`. Set `MONGODB_URL` and `REDIS_URL` to use different endpoints.
+The integration suite requires MongoDB, Redis, and PostgreSQL. The default MongoDB URL is `mongodb://localhost:27017`, the default Redis URL is `redis://localhost:6379`, and the default PostgreSQL URL is `postgres://postgres:postgres@localhost:5432/postgres`. Set `MONGODB_URL`, `REDIS_URL`, and `POSTGRES_URL` to use different endpoints.
 
 ```bash
-MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun run test:integration
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres bun run test:integration
 ```
 
 ### Integration Tests with Docker Compose
 
-Run the integration suite with Docker Compose-managed MongoDB and Redis:
+Run the integration suite with Docker Compose-managed MongoDB, Redis, and PostgreSQL:
 
 ```bash
 bun run test:integration:docker
 ```
 
 This starts the services, waits for their healthchecks, runs the integration tests, and stops the services when the test command exits.
+If local port `5432` is already in use, set `POSTGRES_PORT` and the script will pass the matching `POSTGRES_URL` to the integration suite.
 
-To manage services manually, start MongoDB and Redis:
+```bash
+POSTGRES_PORT=5433 bun run test:integration:docker
+```
+
+To manage services manually, start MongoDB, Redis, and PostgreSQL:
 
 ```bash
 docker compose up -d
@@ -478,7 +542,7 @@ docker compose up -d
 Run the integration suite against those services:
 
 ```bash
-MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 bun run test:integration
+MONGODB_URL=mongodb://localhost:27017 REDIS_URL=redis://localhost:6379 POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres bun run test:integration
 ```
 
 Stop the services:
