@@ -1,8 +1,11 @@
+import { DynamoDBDMutexStore } from "./dynamodb-store";
 import { MongoDMutexStore } from "./mongo-store";
 import { PostgresDMutexStore } from "./postgres-store";
 import { RedisDMutexStore } from "./redis-store";
 import type { DMutexStore } from "./store";
 import type {
+  DmutexDynamoDBClient,
+  DynamoDBDMutexOptions,
   DMutexBackend,
   DmutexMongoClient,
   DmutexPostgresClient,
@@ -38,21 +41,31 @@ const isPostgresClient = (client: unknown): client is DmutexPostgresClient => {
   return hasFunction(client, "query");
 }
 
+const isDynamoDBClient = (client: unknown): client is DmutexDynamoDBClient => {
+  return hasFunction(client, "createTable") &&
+    hasFunction(client, "describeTable") &&
+    hasFunction(client, "putItem") &&
+    hasFunction(client, "deleteItem") &&
+    hasFunction(client, "updateItem");
+}
+
 const detectBackend = (
-  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
   explicitBackend?: DMutexBackend,
-) : DMutexBackend => {
+): DMutexBackend => {
   const matchesMongo = isMongoClient(client);
   const matchesRedis = isRedisClient(client);
   const matchesPostgres = isPostgresClient(client);
+  const matchesDynamoDB = isDynamoDBClient(client);
 
   if (
     explicitBackend !== undefined &&
     explicitBackend !== "mongodb" &&
     explicitBackend !== "redis" &&
-    explicitBackend !== "postgresql"
+    explicitBackend !== "postgresql" &&
+    explicitBackend !== "dynamodb"
   ) {
-    throw new Error("dmutex backend must be mongodb, redis, or postgresql");
+    throw new Error("dmutex backend must be mongodb, redis, postgresql, or dynamodb");
   }
 
   if (explicitBackend === "mongodb") {
@@ -82,6 +95,15 @@ const detectBackend = (
     return "postgresql";
   }
 
+  if (explicitBackend === "dynamodb") {
+    if (!matchesDynamoDB) {
+      throw new Error(
+        "Cannot use DynamoDB backend; client must provide createTable(), describeTable(), putItem(), deleteItem(), and updateItem()",
+      );
+    }
+    return "dynamodb";
+  }
+
   const matchingBackends: DMutexBackend[] = [];
   if (matchesMongo) {
     matchingBackends.push("mongodb");
@@ -91,6 +113,9 @@ const detectBackend = (
   }
   if (matchesPostgres) {
     matchingBackends.push("postgresql");
+  }
+  if (matchesDynamoDB) {
+    matchingBackends.push("dynamodb");
   }
 
   if (matchingBackends.length === 1) {
@@ -104,13 +129,13 @@ const detectBackend = (
   }
 
   throw new Error(
-    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), or PostgreSQL query(text, values)",
+    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), PostgreSQL query(text, values), or DynamoDB createTable()/describeTable()/putItem()/deleteItem()/updateItem()",
   );
 }
 
 export const createDMutexStore = (
   serviceName: string,
-  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+  client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
   options: DMutexOptions,
 ): DMutexStore => {
   const backend = detectBackend(client, options.backend);
@@ -119,6 +144,9 @@ export const createDMutexStore = (
   }
   if (backend === "postgresql") {
     return new PostgresDMutexStore(serviceName, client as DmutexPostgresClient, options as PostgresDMutexOptions);
+  }
+  if (backend === "dynamodb") {
+    return new DynamoDBDMutexStore(serviceName, client as DmutexDynamoDBClient, options as DynamoDBDMutexOptions);
   }
 
   return new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);

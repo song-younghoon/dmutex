@@ -45,7 +45,25 @@ export type DmutexPostgresClient = {
   ): Promise<DmutexPostgresQueryResult<Row>> | DmutexPostgresQueryResult<Row>
 }
 
-export type DMutexBackend = "mongodb" | "redis" | "postgresql"
+export type DmutexDynamoDBAttributeValue = {
+  S?: string
+  N?: string
+  [key: string]: unknown
+}
+
+export type DmutexDynamoDBClient = {
+  createTable(input: Record<string, unknown>): Promise<unknown> | unknown
+  describeTable(
+    input: Record<string, unknown>,
+  ): Promise<{ Table?: { TableStatus?: string } }> | { Table?: { TableStatus?: string } }
+  putItem(input: Record<string, unknown>): Promise<unknown> | unknown
+  deleteItem(input: Record<string, unknown>): Promise<unknown> | unknown
+  updateItem(
+    input: Record<string, unknown>,
+  ): Promise<{ Attributes?: Record<string, DmutexDynamoDBAttributeValue> }> | { Attributes?: Record<string, DmutexDynamoDBAttributeValue> }
+}
+
+export type DMutexBackend = "mongodb" | "redis" | "postgresql" | "dynamodb"
 
 export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
@@ -68,7 +86,19 @@ export type PostgresDMutexOptions = BaseDMutexOptions & {
   tablePrefix?: string
 }
 
-export type DMutexOptions = MongoDMutexOptions | RedisDMutexOptions | PostgresDMutexOptions
+export type DynamoDBDMutexOptions = BaseDMutexOptions & {
+  tableName?: string
+  tablePrefix?: string
+  createTable?: boolean
+  readyTimeoutMs?: number
+  readyPollIntervalMs?: number
+}
+
+export type DMutexOptions =
+  | MongoDMutexOptions
+  | RedisDMutexOptions
+  | PostgresDMutexOptions
+  | DynamoDBDMutexOptions
 
 export type DMutexWaitOptions = {
   ttl?: number
@@ -94,7 +124,13 @@ export type RedisDSemaphoreOptions = RedisDMutexOptions & BaseDSemaphoreOptions
 
 export type PostgresDSemaphoreOptions = PostgresDMutexOptions & BaseDSemaphoreOptions
 
-export type DSemaphoreOptions = MongoDSemaphoreOptions | RedisDSemaphoreOptions | PostgresDSemaphoreOptions
+export type DynamoDBDSemaphoreOptions = DynamoDBDMutexOptions & BaseDSemaphoreOptions
+
+export type DSemaphoreOptions =
+  | MongoDSemaphoreOptions
+  | RedisDSemaphoreOptions
+  | PostgresDSemaphoreOptions
+  | DynamoDBDSemaphoreOptions
 
 export type DSemaphoreWaitOptions = DMutexWaitOptions
 

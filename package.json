@@ -27,6 +27,7 @@
     "mutex",
     "semaphore",
     "mongodb",
+    "dynamodb",
     "postgresql",
     "redis",
     "typescript"
@@ -40,6 +41,9 @@
     "test:unit": "bun test tests/unit",
     "test:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration",
     "test:integration:docker": "bash scripts/test-integration-docker.sh",
+    "test:dynamodb": "DMUTEX_INTEGRATION=1 bun test tests/unit/dynamodb.test.ts tests/integration/dynamodb.integration.test.ts",
+    "test:dynamodb:unit": "bun test tests/unit/dynamodb.test.ts",
+    "test:dynamodb:integration": "DMUTEX_INTEGRATION=1 bun test tests/integration/dynamodb.integration.test.ts",
     "test:mongodb": "DMUTEX_INTEGRATION=1 bun test tests/integration/mongo.integration.test.ts",
     "test:postgres": "DMUTEX_INTEGRATION=1 bun test tests/unit/postgres.test.ts tests/integration/postgres.integration.test.ts",
     "test:postgres:unit": "bun test tests/unit/postgres.test.ts",
@@ -50,6 +54,7 @@
     "prepublishOnly": "bun run build"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1056.0",
     "@types/bun": "latest",
     "ioredis": "^5.10.1",
     "mongodb": ">=4.0.0",

@@ -169,7 +169,7 @@
 - Problem: applications that already depend on stores other than MongoDB or Redis cannot use `dmutex` without introducing a new infrastructure dependency.
 - Improvement: expand backend support in the following order:
   1. PostgreSQL - Done
-  2. DynamoDB - Planned
+  2. DynamoDB - Done
   3. MySQL - Planned
   4. Cloudflare D1 - Planned
   5. Firestore - Planned

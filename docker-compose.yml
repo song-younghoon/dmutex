@@ -35,3 +35,9 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
+
+  dynamodb:
+    image: amazon/dynamodb-local:2.6.1
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+    ports:
+      - "${DYNAMODB_PORT:-8000}:8000"

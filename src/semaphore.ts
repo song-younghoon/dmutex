@@ -2,10 +2,12 @@ import { randomUUID } from "crypto";
 import { createDMutexStore } from "./backend";
 import type { DMutexStore } from "./store";
 import type {
+  DmutexDynamoDBClient,
   DmutexMongoClient,
   DmutexPostgresClient,
   DmutexRedisClient,
   DMutexOptions,
+  DynamoDBDSemaphoreOptions,
   DSemaphoreOptions,
   DSemaphorePermit,
   DSemaphoreWaitOptions,
@@ -16,6 +18,7 @@ import type {
 
 export type {
   BaseDSemaphoreOptions,
+  DynamoDBDSemaphoreOptions,
   DSemaphoreOptions,
   DSemaphorePermit,
   DSemaphoreWaitOptions,
@@ -39,15 +42,16 @@ export class DSemaphore {
   constructor(serviceName: string, client: DmutexMongoClient, options: MongoDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexRedisClient, options: RedisDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexPostgresClient, options: PostgresDSemaphoreOptions)
+  constructor(serviceName: string, client: DmutexDynamoDBClient, options: DynamoDBDSemaphoreOptions)
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
     options: DSemaphoreOptions,
   )
 
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
     options: DSemaphoreOptions,
   ) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;

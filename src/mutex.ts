@@ -1,10 +1,12 @@
 import { DSemaphore } from "./semaphore";
 import type {
+  DmutexDynamoDBClient,
   DmutexMongoClient,
   DmutexRedisClient,
   DMutexLock,
   DMutexOptions,
   DMutexWaitOptions,
+  DynamoDBDMutexOptions,
   DSemaphoreOptions,
   DSemaphorePermit,
   DmutexPostgresClient,
@@ -15,10 +17,13 @@ import type {
 
 export type {
   BaseDMutexOptions,
+  DmutexDynamoDBAttributeValue,
+  DmutexDynamoDBClient,
   DMutexBackend,
   DMutexLock,
   DMutexOptions,
   DMutexWaitOptions,
+  DynamoDBDMutexOptions,
   DmutexMongoClient,
   DmutexMongoCollection,
   DmutexMongoCollectionDocument,
@@ -40,15 +45,16 @@ export class DMutex {
   constructor(serviceName: string, client: DmutexMongoClient, options?: MongoDMutexOptions)
   constructor(serviceName: string, client: DmutexRedisClient, options?: RedisDMutexOptions)
   constructor(serviceName: string, client: DmutexPostgresClient, options?: PostgresDMutexOptions)
+  constructor(serviceName: string, client: DmutexDynamoDBClient, options?: DynamoDBDMutexOptions)
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
     options?: DMutexOptions,
   )
 
   constructor(
     serviceName: string,
-    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient,
+    client: DmutexMongoClient | DmutexRedisClient | DmutexPostgresClient | DmutexDynamoDBClient,
     options: DMutexOptions = {},
   ) {
     this.semaphore = new DSemaphore(serviceName, client, this.getSemaphoreOptions(serviceName, options));
