@@ -160,3 +160,21 @@
   - A single command can run the full integration suite against real MongoDB and Redis.
   - Services are stopped when the command exits.
   - Manual Docker Compose instructions remain available for debugging.
+
+## P3 - Store Adapter Expansion
+
+### 17. Additional store adapter roadmap
+
+- Status: Planned
+- Problem: applications that already depend on stores other than MongoDB or Redis cannot use `dmutex` without introducing a new infrastructure dependency.
+- Improvement: expand backend support in the following order:
+  1. PostgreSQL
+  2. DynamoDB
+  3. MySQL
+  4. Cloudflare D1
+  5. Firestore
+- Acceptance criteria:
+  - Each adapter preserves the existing token-protected acquire, release, and extend semantics.
+  - Each adapter supports bounded TTL behavior and expired-lock takeover without relying solely on asynchronous cleanup.
+  - Each adapter uses a small structural client contract instead of adding mandatory runtime or peer dependencies.
+  - Each adapter includes unit tests and real-backend integration coverage where practical.
