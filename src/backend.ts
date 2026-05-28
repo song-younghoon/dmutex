@@ -1,5 +1,6 @@
 import { D1DMutexStore } from "./d1-store";
 import { DynamoDBDMutexStore } from "./dynamodb-store";
+import { FirestoreDMutexStore } from "./firestore-store";
 import { MongoDMutexStore } from "./mongo-store";
 import { MySQLDMutexStore } from "./mysql-store";
 import { PostgresDMutexStore } from "./postgres-store";
@@ -9,6 +10,7 @@ import type {
   D1DMutexOptions,
   DmutexD1Database,
   DmutexDynamoDBClient,
+  DmutexFirestoreClient,
   DynamoDBDMutexOptions,
   DMutexBackend,
   DmutexMongoClient,
@@ -16,6 +18,7 @@ import type {
   DmutexPostgresClient,
   DmutexRedisClient,
   DMutexOptions,
+  FirestoreDMutexOptions,
   MongoDMutexOptions,
   MySQLDMutexOptions,
   PostgresDMutexOptions,
@@ -55,6 +58,10 @@ const isD1Database = (client: unknown): client is DmutexD1Database => {
   return hasFunction(client, "prepare");
 }
 
+const isFirestoreClient = (client: unknown): client is DmutexFirestoreClient => {
+  return hasFunction(client, "collection") && hasFunction(client, "runTransaction");
+}
+
 const isDynamoDBClient = (client: unknown): client is DmutexDynamoDBClient => {
   return hasFunction(client, "createTable") &&
     hasFunction(client, "describeTable") &&
@@ -70,7 +77,8 @@ const detectBackend = (
     | DmutexPostgresClient
     | DmutexDynamoDBClient
     | DmutexMySQLClient
-    | DmutexD1Database,
+    | DmutexD1Database
+    | DmutexFirestoreClient,
   explicitBackend?: DMutexBackend,
 ): DMutexBackend => {
   const matchesMongo = isMongoClient(client);
@@ -80,6 +88,7 @@ const detectBackend = (
   const matchesPostgres = matchesPostgresContract && !matchesMySQL;
   const matchesDynamoDB = isDynamoDBClient(client);
   const matchesD1 = isD1Database(client);
+  const matchesFirestore = isFirestoreClient(client);
 
   if (
     explicitBackend !== undefined &&
@@ -88,9 +97,10 @@ const detectBackend = (
     explicitBackend !== "postgresql" &&
     explicitBackend !== "dynamodb" &&
     explicitBackend !== "mysql" &&
-    explicitBackend !== "d1"
+    explicitBackend !== "d1" &&
+    explicitBackend !== "firestore"
   ) {
-    throw new Error("dmutex backend must be mongodb, redis, postgresql, dynamodb, mysql, or d1");
+    throw new Error("dmutex backend must be mongodb, redis, postgresql, dynamodb, mysql, d1, or firestore");
   }
 
   if (explicitBackend === "mongodb") {
@@ -147,6 +157,15 @@ const detectBackend = (
     return "d1";
   }
 
+  if (explicitBackend === "firestore") {
+    if (!matchesFirestore) {
+      throw new Error(
+        "Cannot use Firestore backend; client must provide collection(path) and runTransaction(callback)",
+      );
+    }
+    return "firestore";
+  }
+
   const matchingBackends: DMutexBackend[] = [];
   if (matchesMongo) {
     matchingBackends.push("mongodb");
@@ -166,6 +185,9 @@ const detectBackend = (
   if (matchesD1) {
     matchingBackends.push("d1");
   }
+  if (matchesFirestore) {
+    matchingBackends.push("firestore");
+  }
 
   if (matchingBackends.length === 1) {
     return matchingBackends[0]!;
@@ -178,7 +200,7 @@ const detectBackend = (
   }
 
   throw new Error(
-    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), PostgreSQL query(text, values), DynamoDB createTable()/describeTable()/putItem()/deleteItem()/updateItem(), MySQL execute(sql, values), or D1 prepare(sql)",
+    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), PostgreSQL query(text, values), DynamoDB createTable()/describeTable()/putItem()/deleteItem()/updateItem(), MySQL execute(sql, values), D1 prepare(sql), or Firestore collection(path) plus runTransaction(callback)",
   );
 }
 
@@ -190,7 +212,8 @@ export const createDMutexStore = (
     | DmutexPostgresClient
     | DmutexDynamoDBClient
     | DmutexMySQLClient
-    | DmutexD1Database,
+    | DmutexD1Database
+    | DmutexFirestoreClient,
   options: DMutexOptions,
 ): DMutexStore => {
   const backend = detectBackend(client, options.backend);
@@ -208,6 +231,9 @@ export const createDMutexStore = (
   }
   if (backend === "d1") {
     return new D1DMutexStore(serviceName, client as DmutexD1Database, options as D1DMutexOptions);
+  }
+  if (backend === "firestore") {
+    return new FirestoreDMutexStore(serviceName, client as DmutexFirestoreClient, options as FirestoreDMutexOptions);
   }
 
   return new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);

@@ -91,7 +91,36 @@ export type DmutexD1Database = {
   prepare(sql: string): DmutexD1PreparedStatement
 }
 
-export type DMutexBackend = "mongodb" | "redis" | "postgresql" | "dynamodb" | "mysql" | "d1"
+export type DmutexFirestoreDocumentReference = unknown
+
+export type DmutexFirestoreDocumentSnapshot = {
+  exists: boolean | (() => boolean)
+  data(): Record<string, unknown> | undefined
+}
+
+export type DmutexFirestoreCollection = {
+  doc(path: string): DmutexFirestoreDocumentReference
+}
+
+export type DmutexFirestoreTransaction = {
+  get(ref: DmutexFirestoreDocumentReference): Promise<DmutexFirestoreDocumentSnapshot>
+  set(ref: DmutexFirestoreDocumentReference, data: Record<string, unknown>): unknown
+  delete(ref: DmutexFirestoreDocumentReference): unknown
+}
+
+export type DmutexFirestoreClient = {
+  collection(path: string): DmutexFirestoreCollection
+  runTransaction<T>(callback: (transaction: DmutexFirestoreTransaction) => Promise<T>): Promise<T>
+}
+
+export type DMutexBackend =
+  | "mongodb"
+  | "redis"
+  | "postgresql"
+  | "dynamodb"
+  | "mysql"
+  | "d1"
+  | "firestore"
 
 export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
@@ -133,6 +162,11 @@ export type D1DMutexOptions = BaseDMutexOptions & {
   tablePrefix?: string
 }
 
+export type FirestoreDMutexOptions = BaseDMutexOptions & {
+  collectionName?: string
+  collectionPrefix?: string
+}
+
 export type DMutexOptions =
   | MongoDMutexOptions
   | RedisDMutexOptions
@@ -140,6 +174,7 @@ export type DMutexOptions =
   | DynamoDBDMutexOptions
   | MySQLDMutexOptions
   | D1DMutexOptions
+  | FirestoreDMutexOptions
 
 export type DMutexWaitOptions = {
   ttl?: number
@@ -171,6 +206,8 @@ export type MySQLDSemaphoreOptions = MySQLDMutexOptions & BaseDSemaphoreOptions
 
 export type D1DSemaphoreOptions = D1DMutexOptions & BaseDSemaphoreOptions
 
+export type FirestoreDSemaphoreOptions = FirestoreDMutexOptions & BaseDSemaphoreOptions
+
 export type DSemaphoreOptions =
   | MongoDSemaphoreOptions
   | RedisDSemaphoreOptions
@@ -178,6 +215,7 @@ export type DSemaphoreOptions =
   | DynamoDBDSemaphoreOptions
   | MySQLDSemaphoreOptions
   | D1DSemaphoreOptions
+  | FirestoreDSemaphoreOptions
 
 export type DSemaphoreWaitOptions = DMutexWaitOptions
 

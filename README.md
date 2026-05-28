@@ -1,8 +1,8 @@
 # dmutex
 
-A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 as its backend.
+A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, Cloudflare D1, or Firestore as its backend.
 
-`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, Cloudflare D1, or Firestore as the implementation.
 
 `DSemaphore.acquire()` allows up to `maxPermits` callers to hold permits for a given key at the same time. Each permit also carries an ownership token and TTL.
 
@@ -32,9 +32,9 @@ Node.js with Yarn:
 yarn add dmutex
 ```
 
-`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
+`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, Cloudflare D1, or Firestore client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
 
-If you use the official `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` packages, install the versions you want in your application.
+If you use the official `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, `mysql2`, or `firebase-admin` packages, install the versions you want in your application.
 
 Bun:
 
@@ -44,24 +44,25 @@ bun add redis
 bun add pg
 bun add @aws-sdk/client-dynamodb
 bun add mysql2
+bun add firebase-admin
 ```
 
 Node.js with npm:
 
 ```bash
-npm install mongodb redis pg @aws-sdk/client-dynamodb mysql2
+npm install mongodb redis pg @aws-sdk/client-dynamodb mysql2 firebase-admin
 ```
 
 Node.js with pnpm:
 
 ```bash
-pnpm add mongodb redis pg @aws-sdk/client-dynamodb mysql2
+pnpm add mongodb redis pg @aws-sdk/client-dynamodb mysql2 firebase-admin
 ```
 
 Node.js with Yarn:
 
 ```bash
-yarn add mongodb redis pg @aws-sdk/client-dynamodb mysql2
+yarn add mongodb redis pg @aws-sdk/client-dynamodb mysql2 firebase-admin
 ```
 
 Redis compatibility is currently pinned with real package tests for:
@@ -84,6 +85,10 @@ MySQL compatibility is currently pinned with real package tests for:
 Cloudflare D1 compatibility is covered by structural unit tests for:
 
 - D1-style databases that expose `prepare(sql).bind(...values).run()` and `first()`
+
+Firestore compatibility is covered by structural unit tests for:
+
+- Firestore-style clients that expose `collection(path)` and `runTransaction(callback)`
 
 ## Usage
 
@@ -255,6 +260,31 @@ export default {
 };
 ```
 
+### Firestore
+
+```ts
+import { initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { DMutex } from "dmutex";
+
+initializeApp();
+
+const firestore = getFirestore();
+const dmutex = new DMutex("my-service", firestore, {
+  backend: "firestore",
+});
+
+const result = await dmutex.run("job:daily-report", async () => {
+  // Run protected work.
+  return "done";
+}, 60);
+
+if (result === null) {
+  // Another process already holds this lock.
+  process.exit(0);
+}
+```
+
 ### Semaphore
 
 ```ts
@@ -289,7 +319,7 @@ Creates a mutex instance for a service.
 - `serviceName`: service identifier used for backend-specific namespacing
 - `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
-- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, `mysql`, or `d1`. Use this when a wrapped client matches more than one backend contract.
+- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, `mysql`, `d1`, or `firestore`. Use this when a wrapped client matches more than one backend contract.
 
 MongoDB options:
 
@@ -326,11 +356,17 @@ Cloudflare D1 options:
 - `options.tableName`: table name. If set, this takes precedence over `tablePrefix` and `serviceName`.
 - `options.tablePrefix`: table prefix. Defaults to `_dmutex_`.
 
+Firestore options:
+
+- `options.collectionName`: collection name. If set, this takes precedence over `collectionPrefix` and `serviceName`.
+- `options.collectionPrefix`: collection prefix. Defaults to `_dmutex_`.
+
 MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys under the `_dmutex_${serviceName}:` prefix by default. Backend keys include internal permit-slot names.
 PostgreSQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 DynamoDB uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 MySQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 Cloudflare D1 uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
+Firestore uses the `_dmutex_${serviceName}` collection by default. Backend keys are URI-encoded internal permit-slot names.
 
 ### `ready()`
 
@@ -570,13 +606,19 @@ Cloudflare D1:
 - Release and extension verify the token in `DELETE` or `UPDATE` predicates.
 - D1 does not automatically delete expired rows. Expired rows do not block acquisition because each acquisition checks expiration and can atomically take over the row.
 
+Firestore:
+
+- Permit-slot acquisition runs in a Firestore transaction and writes the document only when it is missing or `expiredAt <= now`.
+- Release and extension run in Firestore transactions and verify the ownership token before deleting or updating the document.
+- Firestore TTL cleanup is not required for correctness. Expired documents do not block acquisition because each acquisition checks expiration and can transactionally take over the document.
+
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - `DMutex` is backed by `DSemaphore` with `maxPermits: 1`.
 - `DSemaphore` is implemented as a fixed set of token-protected internal permit slots. Use the same `maxPermits` for all callers coordinating on the same semaphore key.
-- The package does not import `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` at runtime. Client implementations are injected by the application.
-- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`. MySQL clients must expose `execute(sql, values)`. D1 databases must expose `prepare(sql)`.
+- The package does not import `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, `mysql2`, or `firebase-admin` at runtime. Client implementations are injected by the application.
+- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`. MySQL clients must expose `execute(sql, values)`. D1 databases must expose `prepare(sql)`. Firestore clients must expose `collection(path)` and `runTransaction(callback)`.
 - A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
@@ -584,6 +626,7 @@ Common:
 - DynamoDB clients must provide `createTable`, `describeTable`, `putItem`, `deleteItem`, and `updateItem`.
 - MySQL clients must provide `execute(sql, values)`.
 - D1 databases must provide `prepare(sql)` returning statements with `bind`, `run`, and `first`.
+- Firestore clients must provide `collection(path)` and `runTransaction(callback)`.
 
 ## Development
 
@@ -614,7 +657,7 @@ Run the default test suite:
 bun run test
 ```
 
-This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1.
+This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, Cloudflare D1, or Firestore.
 
 Running `bun test` directly is also safe: integration tests are skipped unless `DMUTEX_INTEGRATION=1` is set.
 
@@ -652,6 +695,12 @@ Run only Cloudflare D1 adapter unit tests:
 
 ```bash
 bun run test:d1:unit
+```
+
+Run only Firestore adapter unit tests:
+
+```bash
+bun run test:firestore:unit
 ```
 
 Run only real `redis` and `ioredis` client integration tests:

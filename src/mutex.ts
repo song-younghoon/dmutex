@@ -3,6 +3,7 @@ import type {
   D1DMutexOptions,
   DmutexD1Database,
   DmutexDynamoDBClient,
+  DmutexFirestoreClient,
   DmutexMongoClient,
   DmutexMySQLClient,
   DmutexRedisClient,
@@ -13,6 +14,7 @@ import type {
   DSemaphoreOptions,
   DSemaphorePermit,
   DmutexPostgresClient,
+  FirestoreDMutexOptions,
   MongoDMutexOptions,
   MySQLDMutexOptions,
   PostgresDMutexOptions,
@@ -27,6 +29,11 @@ export type {
   BaseDMutexOptions,
   DmutexDynamoDBAttributeValue,
   DmutexDynamoDBClient,
+  DmutexFirestoreClient,
+  DmutexFirestoreCollection,
+  DmutexFirestoreDocumentReference,
+  DmutexFirestoreDocumentSnapshot,
+  DmutexFirestoreTransaction,
   DMutexBackend,
   DMutexLock,
   DMutexOptions,
@@ -43,6 +50,7 @@ export type {
   DmutexRedisClient,
   DmutexRedisCommandClient,
   DmutexRedisMethodClient,
+  FirestoreDMutexOptions,
   MongoDMutexOptions,
   MySQLDMutexOptions,
   PostgresDMutexOptions,
@@ -59,6 +67,7 @@ export class DMutex {
   constructor(serviceName: string, client: DmutexDynamoDBClient, options?: DynamoDBDMutexOptions)
   constructor(serviceName: string, client: DmutexMySQLClient, options?: MySQLDMutexOptions)
   constructor(serviceName: string, client: DmutexD1Database, options?: D1DMutexOptions)
+  constructor(serviceName: string, client: DmutexFirestoreClient, options?: FirestoreDMutexOptions)
   constructor(
     serviceName: string,
     client:
@@ -67,7 +76,8 @@ export class DMutex {
       | DmutexPostgresClient
       | DmutexDynamoDBClient
       | DmutexMySQLClient
-      | DmutexD1Database,
+      | DmutexD1Database
+      | DmutexFirestoreClient,
     options?: DMutexOptions,
   )
 
@@ -79,7 +89,8 @@ export class DMutex {
       | DmutexPostgresClient
       | DmutexDynamoDBClient
       | DmutexMySQLClient
-      | DmutexD1Database,
+      | DmutexD1Database
+      | DmutexFirestoreClient,
     options: DMutexOptions = {},
   ) {
     this.semaphore = new DSemaphore(serviceName, client, this.getSemaphoreOptions(serviceName, options));

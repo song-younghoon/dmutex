@@ -5,6 +5,7 @@ import type {
   D1DSemaphoreOptions,
   DmutexD1Database,
   DmutexDynamoDBClient,
+  DmutexFirestoreClient,
   DmutexMongoClient,
   DmutexMySQLClient,
   DmutexPostgresClient,
@@ -14,6 +15,7 @@ import type {
   DSemaphoreOptions,
   DSemaphorePermit,
   DSemaphoreWaitOptions,
+  FirestoreDSemaphoreOptions,
   MongoDSemaphoreOptions,
   MySQLDSemaphoreOptions,
   PostgresDSemaphoreOptions,
@@ -27,6 +29,7 @@ export type {
   DSemaphoreOptions,
   DSemaphorePermit,
   DSemaphoreWaitOptions,
+  FirestoreDSemaphoreOptions,
   MongoDSemaphoreOptions,
   MySQLDSemaphoreOptions,
   PostgresDSemaphoreOptions,
@@ -51,6 +54,7 @@ export class DSemaphore {
   constructor(serviceName: string, client: DmutexDynamoDBClient, options: DynamoDBDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexMySQLClient, options: MySQLDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexD1Database, options: D1DSemaphoreOptions)
+  constructor(serviceName: string, client: DmutexFirestoreClient, options: FirestoreDSemaphoreOptions)
   constructor(
     serviceName: string,
     client:
@@ -59,7 +63,8 @@ export class DSemaphore {
       | DmutexPostgresClient
       | DmutexDynamoDBClient
       | DmutexMySQLClient
-      | DmutexD1Database,
+      | DmutexD1Database
+      | DmutexFirestoreClient,
     options: DSemaphoreOptions,
   )
 
@@ -71,7 +76,8 @@ export class DSemaphore {
       | DmutexPostgresClient
       | DmutexDynamoDBClient
       | DmutexMySQLClient
-      | DmutexD1Database,
+      | DmutexD1Database
+      | DmutexFirestoreClient,
     options: DSemaphoreOptions,
   ) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;
