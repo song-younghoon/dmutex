@@ -1,3 +1,4 @@
+import { D1DMutexStore } from "./d1-store";
 import { DynamoDBDMutexStore } from "./dynamodb-store";
 import { MongoDMutexStore } from "./mongo-store";
 import { MySQLDMutexStore } from "./mysql-store";
@@ -5,6 +6,8 @@ import { PostgresDMutexStore } from "./postgres-store";
 import { RedisDMutexStore } from "./redis-store";
 import type { DMutexStore } from "./store";
 import type {
+  D1DMutexOptions,
+  DmutexD1Database,
   DmutexDynamoDBClient,
   DynamoDBDMutexOptions,
   DMutexBackend,
@@ -48,6 +51,10 @@ const isMySQLClient = (client: unknown): client is DmutexMySQLClient => {
   return hasFunction(client, "execute");
 }
 
+const isD1Database = (client: unknown): client is DmutexD1Database => {
+  return hasFunction(client, "prepare");
+}
+
 const isDynamoDBClient = (client: unknown): client is DmutexDynamoDBClient => {
   return hasFunction(client, "createTable") &&
     hasFunction(client, "describeTable") &&
@@ -62,7 +69,8 @@ const detectBackend = (
     | DmutexRedisClient
     | DmutexPostgresClient
     | DmutexDynamoDBClient
-    | DmutexMySQLClient,
+    | DmutexMySQLClient
+    | DmutexD1Database,
   explicitBackend?: DMutexBackend,
 ): DMutexBackend => {
   const matchesMongo = isMongoClient(client);
@@ -71,6 +79,7 @@ const detectBackend = (
   const matchesMySQL = isMySQLClient(client);
   const matchesPostgres = matchesPostgresContract && !matchesMySQL;
   const matchesDynamoDB = isDynamoDBClient(client);
+  const matchesD1 = isD1Database(client);
 
   if (
     explicitBackend !== undefined &&
@@ -78,9 +87,10 @@ const detectBackend = (
     explicitBackend !== "redis" &&
     explicitBackend !== "postgresql" &&
     explicitBackend !== "dynamodb" &&
-    explicitBackend !== "mysql"
+    explicitBackend !== "mysql" &&
+    explicitBackend !== "d1"
   ) {
-    throw new Error("dmutex backend must be mongodb, redis, postgresql, dynamodb, or mysql");
+    throw new Error("dmutex backend must be mongodb, redis, postgresql, dynamodb, mysql, or d1");
   }
 
   if (explicitBackend === "mongodb") {
@@ -128,6 +138,15 @@ const detectBackend = (
     return "mysql";
   }
 
+  if (explicitBackend === "d1") {
+    if (!matchesD1) {
+      throw new Error(
+        "Cannot use D1 backend; client must provide prepare(sql)",
+      );
+    }
+    return "d1";
+  }
+
   const matchingBackends: DMutexBackend[] = [];
   if (matchesMongo) {
     matchingBackends.push("mongodb");
@@ -144,6 +163,9 @@ const detectBackend = (
   if (matchesMySQL) {
     matchingBackends.push("mysql");
   }
+  if (matchesD1) {
+    matchingBackends.push("d1");
+  }
 
   if (matchingBackends.length === 1) {
     return matchingBackends[0]!;
@@ -156,7 +178,7 @@ const detectBackend = (
   }
 
   throw new Error(
-    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), PostgreSQL query(text, values), DynamoDB createTable()/describeTable()/putItem()/deleteItem()/updateItem(), or MySQL execute(sql, values)",
+    "Cannot detect dmutex backend; client must provide MongoDB db(), Redis sendCommand(args) / set(...args) plus eval(...args), PostgreSQL query(text, values), DynamoDB createTable()/describeTable()/putItem()/deleteItem()/updateItem(), MySQL execute(sql, values), or D1 prepare(sql)",
   );
 }
 
@@ -167,7 +189,8 @@ export const createDMutexStore = (
     | DmutexRedisClient
     | DmutexPostgresClient
     | DmutexDynamoDBClient
-    | DmutexMySQLClient,
+    | DmutexMySQLClient
+    | DmutexD1Database,
   options: DMutexOptions,
 ): DMutexStore => {
   const backend = detectBackend(client, options.backend);
@@ -182,6 +205,9 @@ export const createDMutexStore = (
   }
   if (backend === "mysql") {
     return new MySQLDMutexStore(serviceName, client as DmutexMySQLClient, options as MySQLDMutexOptions);
+  }
+  if (backend === "d1") {
+    return new D1DMutexStore(serviceName, client as DmutexD1Database, options as D1DMutexOptions);
   }
 
   return new MongoDMutexStore(serviceName, client as DmutexMongoClient, options as MongoDMutexOptions);

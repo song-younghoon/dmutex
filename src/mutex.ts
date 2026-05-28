@@ -1,5 +1,7 @@
 import { DSemaphore } from "./semaphore";
 import type {
+  D1DMutexOptions,
+  DmutexD1Database,
   DmutexDynamoDBClient,
   DmutexMongoClient,
   DmutexMySQLClient,
@@ -18,6 +20,10 @@ import type {
 } from "./types";
 
 export type {
+  D1DMutexOptions,
+  DmutexD1Database,
+  DmutexD1PreparedStatement,
+  DmutexD1Result,
   BaseDMutexOptions,
   DmutexDynamoDBAttributeValue,
   DmutexDynamoDBClient,
@@ -52,6 +58,7 @@ export class DMutex {
   constructor(serviceName: string, client: DmutexPostgresClient, options?: PostgresDMutexOptions)
   constructor(serviceName: string, client: DmutexDynamoDBClient, options?: DynamoDBDMutexOptions)
   constructor(serviceName: string, client: DmutexMySQLClient, options?: MySQLDMutexOptions)
+  constructor(serviceName: string, client: DmutexD1Database, options?: D1DMutexOptions)
   constructor(
     serviceName: string,
     client:
@@ -59,7 +66,8 @@ export class DMutex {
       | DmutexRedisClient
       | DmutexPostgresClient
       | DmutexDynamoDBClient
-      | DmutexMySQLClient,
+      | DmutexMySQLClient
+      | DmutexD1Database,
     options?: DMutexOptions,
   )
 
@@ -70,7 +78,8 @@ export class DMutex {
       | DmutexRedisClient
       | DmutexPostgresClient
       | DmutexDynamoDBClient
-      | DmutexMySQLClient,
+      | DmutexMySQLClient
+      | DmutexD1Database,
     options: DMutexOptions = {},
   ) {
     this.semaphore = new DSemaphore(serviceName, client, this.getSemaphoreOptions(serviceName, options));

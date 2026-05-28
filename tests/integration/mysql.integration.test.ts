@@ -8,6 +8,25 @@ const mutexSlotKey = (key: string) => `permit:0:${key}`;
 
 const quoteIdentifier = (identifier: string) => `\`${identifier.replaceAll("`", "``")}\``;
 
+const requireMySQL = async (pool: Pool) => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      await pool.execute("SELECT 1");
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  throw new Error(
+    `MySQL is required for integration tests. Start MySQL or set MYSQL_URL. Tried: ${mysqlUrl}`,
+    { cause: lastError },
+  );
+}
+
 describeIntegration("DMutex MySQL integration", () => {
   let pool: Pool | undefined;
   let mutex: DMutex;
@@ -21,14 +40,7 @@ describeIntegration("DMutex MySQL integration", () => {
       connectionLimit: 4,
     });
 
-    try {
-      await pool.execute("SELECT 1");
-    } catch (error) {
-      throw new Error(
-        `MySQL is required for integration tests. Start MySQL or set MYSQL_URL. Tried: ${mysqlUrl}`,
-        { cause: error },
-      );
-    }
+    await requireMySQL(pool);
 
     mutex = new DMutex("test-service", pool, {
       backend: "mysql",

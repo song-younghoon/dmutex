@@ -74,7 +74,24 @@ export type DmutexMySQLClient = {
   ): Promise<[Result, unknown]> | [Result, unknown]
 }
 
-export type DMutexBackend = "mongodb" | "redis" | "postgresql" | "dynamodb" | "mysql"
+export type DmutexD1Result = {
+  success?: boolean
+  meta?: {
+    changes?: number
+  }
+}
+
+export type DmutexD1PreparedStatement = {
+  bind(...values: unknown[]): DmutexD1PreparedStatement
+  run(): Promise<DmutexD1Result> | DmutexD1Result
+  first<Row = Record<string, unknown>>(): Promise<Row | null> | Row | null
+}
+
+export type DmutexD1Database = {
+  prepare(sql: string): DmutexD1PreparedStatement
+}
+
+export type DMutexBackend = "mongodb" | "redis" | "postgresql" | "dynamodb" | "mysql" | "d1"
 
 export type BaseDMutexOptions = {
   defaultTtlSeconds?: number
@@ -111,12 +128,18 @@ export type MySQLDMutexOptions = BaseDMutexOptions & {
   tablePrefix?: string
 }
 
+export type D1DMutexOptions = BaseDMutexOptions & {
+  tableName?: string
+  tablePrefix?: string
+}
+
 export type DMutexOptions =
   | MongoDMutexOptions
   | RedisDMutexOptions
   | PostgresDMutexOptions
   | DynamoDBDMutexOptions
   | MySQLDMutexOptions
+  | D1DMutexOptions
 
 export type DMutexWaitOptions = {
   ttl?: number
@@ -146,12 +169,15 @@ export type DynamoDBDSemaphoreOptions = DynamoDBDMutexOptions & BaseDSemaphoreOp
 
 export type MySQLDSemaphoreOptions = MySQLDMutexOptions & BaseDSemaphoreOptions
 
+export type D1DSemaphoreOptions = D1DMutexOptions & BaseDSemaphoreOptions
+
 export type DSemaphoreOptions =
   | MongoDSemaphoreOptions
   | RedisDSemaphoreOptions
   | PostgresDSemaphoreOptions
   | DynamoDBDSemaphoreOptions
   | MySQLDSemaphoreOptions
+  | D1DSemaphoreOptions
 
 export type DSemaphoreWaitOptions = DMutexWaitOptions
 

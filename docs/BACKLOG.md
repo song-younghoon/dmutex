@@ -171,7 +171,7 @@
   1. PostgreSQL - Done
   2. DynamoDB - Done
   3. MySQL - Done
-  4. Cloudflare D1 - Planned
+  4. Cloudflare D1 - Done
   5. Firestore - Planned
 - Acceptance criteria:
   - Each adapter preserves the existing token-protected acquire, release, and extend semantics.

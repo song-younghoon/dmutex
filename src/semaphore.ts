@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import { createDMutexStore } from "./backend";
 import type { DMutexStore } from "./store";
 import type {
+  D1DSemaphoreOptions,
+  DmutexD1Database,
   DmutexDynamoDBClient,
   DmutexMongoClient,
   DmutexMySQLClient,
@@ -19,6 +21,7 @@ import type {
 } from "./types";
 
 export type {
+  D1DSemaphoreOptions,
   BaseDSemaphoreOptions,
   DynamoDBDSemaphoreOptions,
   DSemaphoreOptions,
@@ -47,6 +50,7 @@ export class DSemaphore {
   constructor(serviceName: string, client: DmutexPostgresClient, options: PostgresDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexDynamoDBClient, options: DynamoDBDSemaphoreOptions)
   constructor(serviceName: string, client: DmutexMySQLClient, options: MySQLDSemaphoreOptions)
+  constructor(serviceName: string, client: DmutexD1Database, options: D1DSemaphoreOptions)
   constructor(
     serviceName: string,
     client:
@@ -54,7 +58,8 @@ export class DSemaphore {
       | DmutexRedisClient
       | DmutexPostgresClient
       | DmutexDynamoDBClient
-      | DmutexMySQLClient,
+      | DmutexMySQLClient
+      | DmutexD1Database,
     options: DSemaphoreOptions,
   )
 
@@ -65,7 +70,8 @@ export class DSemaphore {
       | DmutexRedisClient
       | DmutexPostgresClient
       | DmutexDynamoDBClient
-      | DmutexMySQLClient,
+      | DmutexMySQLClient
+      | DmutexD1Database,
     options: DSemaphoreOptions,
   ) {
     this.defaultTtlSeconds = options.defaultTtlSeconds ?? 5 * 60;

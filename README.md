@@ -1,8 +1,8 @@
 # dmutex
 
-A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL as its backend.
+A small TypeScript distributed mutex and semaphore library that can use MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 as its backend.
 
-`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 as the implementation.
 
 `DSemaphore.acquire()` allows up to `maxPermits` callers to hold permits for a given key at the same time. Each permit also carries an ownership token and TTL.
 
@@ -32,7 +32,7 @@ Node.js with Yarn:
 yarn add dmutex
 ```
 
-`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
+`dmutex` does not force a specific MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1 client package as a runtime dependency or peer dependency. Pass in the database client your application already uses.
 
 If you use the official `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` packages, install the versions you want in your application.
 
@@ -80,6 +80,10 @@ DynamoDB compatibility is currently pinned with real package tests for:
 MySQL compatibility is currently pinned with real package tests for:
 
 - `mysql2/promise`: uses the `execute(sql, values)` path
+
+Cloudflare D1 compatibility is covered by structural unit tests for:
+
+- D1-style databases that expose `prepare(sql).bind(...values).run()` and `first()`
 
 ## Usage
 
@@ -225,6 +229,32 @@ if (result === null) {
 await mysqlPool.end();
 ```
 
+### Cloudflare D1
+
+```ts
+import { DMutex } from "dmutex";
+
+export interface Env {
+  DB: D1Database
+}
+
+export default {
+  async fetch(_request: Request, env: Env) {
+    const dmutex = new DMutex("my-service", env.DB, {
+      backend: "d1",
+    });
+    await dmutex.ready();
+
+    const result = await dmutex.run("job:daily-report", async () => {
+      // Run protected work.
+      return "done";
+    }, 60);
+
+    return new Response(result ?? "busy");
+  },
+};
+```
+
 ### Semaphore
 
 ```ts
@@ -259,7 +289,7 @@ Creates a mutex instance for a service.
 - `serviceName`: service identifier used for backend-specific namespacing
 - `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
-- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, or `mysql`. Use this when a wrapped client matches more than one backend contract.
+- `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, `mysql`, or `d1`. Use this when a wrapped client matches more than one backend contract.
 
 MongoDB options:
 
@@ -291,10 +321,16 @@ MySQL options:
 - `options.tableName`: table name. If set, this takes precedence over `tablePrefix` and `serviceName`.
 - `options.tablePrefix`: table prefix. Defaults to `_dmutex_`.
 
+Cloudflare D1 options:
+
+- `options.tableName`: table name. If set, this takes precedence over `tablePrefix` and `serviceName`.
+- `options.tablePrefix`: table prefix. Defaults to `_dmutex_`.
+
 MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys under the `_dmutex_${serviceName}:` prefix by default. Backend keys include internal permit-slot names.
 PostgreSQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 DynamoDB uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 MySQL uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
+Cloudflare D1 uses the `_dmutex_${serviceName}` table by default. Backend keys include internal permit-slot names.
 
 ### `ready()`
 
@@ -528,19 +564,26 @@ MySQL:
 - Release and extension verify the token in `DELETE` or `UPDATE` predicates.
 - MySQL does not automatically delete expired rows. Expired rows do not block acquisition because each acquisition checks expiration and can atomically take over the row.
 
+Cloudflare D1:
+
+- Permit-slot acquisition uses SQLite `INSERT ... ON CONFLICT ... DO UPDATE` and only replaces an existing row when `expired_at <= now`.
+- Release and extension verify the token in `DELETE` or `UPDATE` predicates.
+- D1 does not automatically delete expired rows. Expired rows do not block acquisition because each acquisition checks expiration and can atomically take over the row.
+
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
 - `DMutex` is backed by `DSemaphore` with `maxPermits: 1`.
 - `DSemaphore` is implemented as a fixed set of token-protected internal permit slots. Use the same `maxPermits` for all callers coordinating on the same semaphore key.
 - The package does not import `mongodb`, `redis`, `ioredis`, `pg`, `@aws-sdk/client-dynamodb`, or `mysql2` at runtime. Client implementations are injected by the application.
-- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`. MySQL clients must expose `execute(sql, values)`.
+- Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`. PostgreSQL clients must expose `query(text, values)`. DynamoDB clients must expose `createTable()`, `describeTable()`, `putItem()`, `deleteItem()`, and `updateItem()`. MySQL clients must expose `execute(sql, values)`. D1 databases must expose `prepare(sql)`.
 - A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.
 - MongoDB clients must provide `db`, `collection`, `createIndex`, `insertOne`, `updateOne`, and `deleteOne`.
 - Redis clients must provide either `sendCommand(args)` or `set(...args)` plus `eval(...args)`.
 - PostgreSQL clients must provide `query(text, values)`.
 - DynamoDB clients must provide `createTable`, `describeTable`, `putItem`, `deleteItem`, and `updateItem`.
 - MySQL clients must provide `execute(sql, values)`.
+- D1 databases must provide `prepare(sql)` returning statements with `bind`, `run`, and `first`.
 
 ## Development
 
@@ -571,7 +614,7 @@ Run the default test suite:
 bun run test
 ```
 
-This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, DynamoDB, or MySQL.
+This runs the fast unit suite only and does not require MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, or Cloudflare D1.
 
 Running `bun test` directly is also safe: integration tests are skipped unless `DMUTEX_INTEGRATION=1` is set.
 
@@ -603,6 +646,12 @@ Run only MySQL adapter unit tests:
 
 ```bash
 bun run test:mysql:unit
+```
+
+Run only Cloudflare D1 adapter unit tests:
+
+```bash
+bun run test:d1:unit
 ```
 
 Run only real `redis` and `ioredis` client integration tests:
