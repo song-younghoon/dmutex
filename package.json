@@ -1,7 +1,7 @@
 {
   "name": "dmutex",
   "version": "0.3.0",
-  "description": "A small TypeScript distributed mutex library for MongoDB and Redis.",
+  "description": "A small TypeScript distributed mutex and semaphore library for MongoDB and Redis.",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,7 +23,9 @@
   },
   "keywords": [
     "distributed-lock",
+    "distributed-semaphore",
     "mutex",
+    "semaphore",
     "mongodb",
     "redis",
     "typescript"

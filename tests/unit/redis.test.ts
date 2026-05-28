@@ -252,8 +252,8 @@ describe("Redis mutex backend", () => {
 
     expect(firstLock).not.toBeNull();
     expect(secondLock).not.toBeNull();
-    expect(redisClient.entries.has("_dmutex_first-service:shared-key")).toBe(true);
-    expect(redisClient.entries.has("_dmutex_second-service:shared-key")).toBe(true);
+    expect(redisClient.entries.has("_dmutex_first-service:permit:0:shared-key")).toBe(true);
+    expect(redisClient.entries.has("_dmutex_second-service:permit:0:shared-key")).toBe(true);
 
     await firstLock!.release();
     await secondLock!.release();

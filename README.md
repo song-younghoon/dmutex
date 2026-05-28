@@ -1,8 +1,10 @@
 # dmutex
 
-A small TypeScript distributed mutex library that can use MongoDB or Redis as its backend.
+A small TypeScript distributed mutex and semaphore library that can use MongoDB or Redis as its backend.
 
-`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. Applications can use the same `DMutex` interface while choosing either MongoDB or Redis as the implementation.
+`DMutex.acquire()` allows only one caller to hold a lock for a given key at a time. Each lock stores an ownership token, so a stale worker cannot release a lock that was later acquired by another worker. `DMutex` is implemented as a single-permit semaphore, and applications can use the same interface while choosing either MongoDB or Redis as the implementation.
+
+`DSemaphore.acquire()` allows up to `maxPermits` callers to hold permits for a given key at the same time. Each permit also carries an ownership token and TTL.
 
 ## Installation
 
@@ -115,6 +117,31 @@ if (result === null) {
 await redisClient.close();
 ```
 
+### Semaphore
+
+```ts
+import { createClient } from "redis";
+import { DSemaphore } from "dmutex";
+
+const redisClient = createClient({ url: "redis://localhost:6379" });
+await redisClient.connect();
+
+const semaphore = new DSemaphore("my-service", redisClient, {
+  maxPermits: 3,
+});
+
+const result = await semaphore.run("api:partner", async (permit) => {
+  await permit.extend(120);
+  return "done";
+}, 120);
+
+if (result === null) {
+  // All permits are currently held.
+}
+
+await redisClient.close();
+```
+
 ## API
 
 ### `new DMutex(serviceName, client, options?)`
@@ -136,7 +163,7 @@ Redis options:
 
 - `options.keyPrefix`: Redis key prefix. Defaults to `_dmutex_${serviceName}:`.
 
-MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys in the `_dmutex_${serviceName}:${key}` format by default.
+MongoDB uses the `_dmutex_${serviceName}` collection in the `dmutex` database by default. Redis uses keys under the `_dmutex_${serviceName}:` prefix by default. Backend keys include internal permit-slot names.
 
 ### `ready()`
 
@@ -275,24 +302,88 @@ await dmutex.extend("some-key", lock.token, 300);
 
 Extends the TTL for an active lock with the matching token. Returns `true` on success, or `false` when the token does not match or the lock is already expired.
 
+## Semaphore API
+
+### `new DSemaphore(serviceName, client, options)`
+
+Creates a semaphore instance for a service.
+
+- `serviceName`: service identifier used for backend-specific namespacing
+- `client`: MongoDB or Redis client. Backend detection is the same as `DMutex`.
+- `options.maxPermits`: maximum concurrent permits per key. Must be a positive integer.
+- `options.defaultTtlSeconds`, `options.backend`, MongoDB options, and Redis options are the same as `DMutex`.
+
+MongoDB uses the `_dsemaphore_${serviceName}` collection by default. Redis uses `_dsemaphore_${serviceName}:` as the default key prefix. Backend keys include internal permit-slot names. Explicit `collectionName`, `collectionPrefix`, and `keyPrefix` options override these defaults.
+
+### `semaphore.acquire(key, ttl?)`
+
+```ts
+const permit = await semaphore.acquire("some-key", 300);
+
+if (permit) {
+  try {
+    // limited-concurrency work
+  } finally {
+    await permit.release();
+  }
+}
+```
+
+Attempts to acquire one permit for the given key.
+
+- `key`: semaphore identifier
+- `ttl`: permit TTL in seconds. Defaults to 300 seconds.
+- returns: `DSemaphorePermit` when a permit is acquired, or `null` when all permits are held
+
+`DSemaphorePermit` contains:
+
+- `key`: original semaphore key
+- `token`: ownership token
+- `slot`: internal permit slot number
+- `expiredAt`: current permit expiration time, updated after a successful `permit.extend()`
+- `release()`: releases only this permit
+- `extend(ttl?)`: extends only this active permit
+
+### `semaphore.run(key, callback, ttl?)`
+
+Attempts to acquire one permit, runs the callback while the permit is held, and releases the permit in a `finally` block. It returns the callback result, or `null` when all permits are held.
+
+### `semaphore.acquireWithRetry(key, options?)`
+
+Attempts to acquire one permit until it succeeds or `timeoutMs` elapses. The options are the same as `DMutex.acquireWithRetry()`.
+
+### `semaphore.runWithRetry(key, callback, options?)`
+
+Attempts to acquire one permit with retry, runs the callback, and releases the permit in a `finally` block.
+
+### `semaphore.release(key, token)`
+
+Releases the active permit with the matching token for the given key. Returns `true` on success, or `false` when no active permit matches.
+
+### `semaphore.extend(key, token, ttl?)`
+
+Extends the TTL for an active permit with the matching token. Returns `true` on success, or `false` when no active permit matches.
+
 ## Backend Behavior and Caveats
 
 MongoDB:
 
-- Lock acquisition uses MongoDB `insertOne()`. Only one document can exist for a given `_id`, so only one concurrent caller can win.
+- Permit-slot acquisition uses MongoDB `insertOne()`. Only one document can exist for a given internal slot `_id`, so only one concurrent caller can win each slot.
 - TTL is handled with the `expiredAt` field and a MongoDB TTL index. MongoDB's TTL monitor runs periodically, so expired locks are not deleted exactly at their expiration time.
 - If an expired lock document has not yet been removed by the TTL monitor, a new acquisition attempt checks expiration and atomically attempts takeover.
 - Duplicate key conflicts are treated as normal lock contention. Connection, authorization, and other MongoDB errors are thrown to the caller.
 
 Redis:
 
-- Lock acquisition uses `SET key token PX ttl NX`.
-- Lock release and extension use Lua `EVAL` scripts to verify the token and run `DEL` or `PEXPIRE` atomically.
-- `DMutexLock.expiredAt` is calculated with the client clock. Actual expiration is enforced by Redis TTL.
+- Permit-slot acquisition uses `SET key token PX ttl NX`.
+- Release and extension use Lua `EVAL` scripts to verify the token and run `DEL` or `PEXPIRE` atomically.
+- `DMutexLock.expiredAt` and `DSemaphorePermit.expiredAt` are calculated with the client clock. Actual expiration is enforced by Redis TTL.
 
 Common:
 
 - Release and extension verify the ownership token. The safest usage is to call `release()` and `extend()` on the lock handle returned by `acquire()`.
+- `DMutex` is backed by `DSemaphore` with `maxPermits: 1`.
+- `DSemaphore` is implemented as a fixed set of token-protected internal permit slots. Use the same `maxPermits` for all callers coordinating on the same semaphore key.
 - The package does not import `mongodb`, `redis`, or `ioredis` at runtime. Client implementations are injected by the application.
 - Backend detection is structural. MongoDB clients must expose `db()`. Redis clients must expose either `sendCommand(args)` or both `set(...args)` and `eval(...args)`.
 - A client that matches multiple backend contracts is rejected because backend selection would be ambiguous. Pass `options.backend` to choose explicitly.

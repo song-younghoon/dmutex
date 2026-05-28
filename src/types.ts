@@ -65,3 +65,24 @@ export type DMutexLock = {
   release: () => Promise<boolean>
   extend: (ttl?: number) => Promise<boolean>
 }
+
+export type BaseDSemaphoreOptions = BaseDMutexOptions & {
+  maxPermits: number
+}
+
+export type MongoDSemaphoreOptions = MongoDMutexOptions & BaseDSemaphoreOptions
+
+export type RedisDSemaphoreOptions = RedisDMutexOptions & BaseDSemaphoreOptions
+
+export type DSemaphoreOptions = MongoDSemaphoreOptions | RedisDSemaphoreOptions
+
+export type DSemaphoreWaitOptions = DMutexWaitOptions
+
+export type DSemaphorePermit = {
+  key: string
+  token: string
+  slot: number
+  expiredAt: Date
+  release: () => Promise<boolean>
+  extend: (ttl?: number) => Promise<boolean>
+}

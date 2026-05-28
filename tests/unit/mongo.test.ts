@@ -100,6 +100,8 @@ const isDateComparison = <T extends "$lte" | "$gt">(
   );
 }
 
+const mutexSlotKey = (key: string) => `permit:0:${key}`;
+
 describe("Mongo mutex backend unit", () => {
   test("supports lock, contention, and release without a real MongoDB server", async () => {
     const client = new FakeMongoClient();
@@ -119,13 +121,13 @@ describe("Mongo mutex backend unit", () => {
     const firstLock = await firstMutex.acquire("expired-key", 30);
     expect(firstLock).not.toBeNull();
 
-    client.collection.documents.get("expired-key")!.expiredAt = new Date(Date.now() - 1000);
+    client.collection.documents.get(mutexSlotKey("expired-key"))!.expiredAt = new Date(Date.now() - 1000);
 
     const secondLock = await secondMutex.acquire("expired-key", 30);
     expect(secondLock).not.toBeNull();
     expect(secondLock!.token).not.toBe(firstLock!.token);
     expect(await firstLock!.release()).toBe(false);
-    expect(client.collection.documents.get("expired-key")?.value).toBe(secondLock!.token);
+    expect(client.collection.documents.get(mutexSlotKey("expired-key"))?.value).toBe(secondLock!.token);
   });
 
   test("updates the lock handle expiration after a successful extension", async () => {
@@ -140,7 +142,7 @@ describe("Mongo mutex backend unit", () => {
 
     expect(await lock!.extend(60)).toBe(true);
     expect(lock!.expiredAt.getTime()).toBeGreaterThan(originalExpiredAt);
-    expect(client.collection.documents.get("extend-key")?.expiredAt.getTime()).toBe(
+    expect(client.collection.documents.get(mutexSlotKey("extend-key"))?.expiredAt.getTime()).toBe(
       lock!.expiredAt.getTime(),
     );
   });
@@ -168,7 +170,7 @@ describe("Mongo mutex backend unit", () => {
     const secondMutex = new DMutex("test-service", client);
 
     expect(await firstMutex.lock("stale-key", 30)).toBe(true);
-    client.collection.documents.get("stale-key")!.expiredAt = new Date(Date.now() - 1000);
+    client.collection.documents.get(mutexSlotKey("stale-key"))!.expiredAt = new Date(Date.now() - 1000);
 
     const secondLock = await secondMutex.acquire("stale-key", 30);
     expect(secondLock).not.toBeNull();

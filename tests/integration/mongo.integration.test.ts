@@ -3,6 +3,7 @@ import { MongoClient } from "mongodb";
 import { DMutex, type DmutexMongoCollectionDocument } from "../../src/mutex";
 
 const describeIntegration = process.env.DMUTEX_INTEGRATION === "1" ? describe : describe.skip;
+const mutexSlotKey = (key: string) => `permit:0:${key}`;
 
 describeIntegration("DMutex MongoDB integration", () => {
   let mongoClient: MongoClient | undefined;
@@ -85,7 +86,7 @@ describeIntegration("DMutex MongoDB integration", () => {
     // Check if the document has the correct expiredAt field
     const db = mongoClient!.db('dmutex');
     const collection = db.collection<DmutexMongoCollectionDocument>(collectionName);
-    const doc = await collection.findOne({ _id: key });
+    const doc = await collection.findOne({ _id: mutexSlotKey(key) });
 
     expect(doc).not.toBeNull();
     expect(doc?.expiredAt).toBeInstanceOf(Date);
@@ -145,7 +146,7 @@ describeIntegration("DMutex MongoDB integration", () => {
     const db = mongoClient!.db('dmutex');
     const collection = db.collection<DmutexMongoCollectionDocument>(collectionName);
     await collection.updateOne(
-      { _id: key },
+      { _id: mutexSlotKey(key) },
       { $set: { expiredAt: new Date(Date.now() - 1000) } },
     );
 
@@ -156,7 +157,7 @@ describeIntegration("DMutex MongoDB integration", () => {
     const staleRelease = await firstLock!.release();
     expect(staleRelease).toBe(false);
 
-    const doc = await collection.findOne({ _id: key });
+    const doc = await collection.findOne({ _id: mutexSlotKey(key) });
     expect(doc?.value).toBe(secondLock!.token);
 
     // Cleanup
