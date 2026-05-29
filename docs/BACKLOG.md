@@ -62,12 +62,12 @@
 
 ### 7. Test environment
 
-- Status: Partially done
-- Problem: integration tests require MongoDB/Redis but should fail clearly when backing services are unavailable.
-- Improvement: either document a Docker/Testcontainers path or fail fast with clear MongoDB/Redis connection errors.
+- Status: Done
+- Problem: integration tests require real backing services but should fail clearly when those services are unavailable.
+- Improvement: document a Docker Compose path and fail fast with clear connection errors for the real-backend integration suite.
 - Acceptance criteria:
-  - Missing MongoDB/Redis produces an actionable failure.
-  - CI can run tests repeatably.
+  - Missing MongoDB, Redis, PostgreSQL, DynamoDB Local, or MySQL produces an actionable failure.
+  - CI can run real-backend integration tests repeatably through the Docker-backed command.
 
 ### 8. Backend implementation organization
 
@@ -88,7 +88,7 @@
 - Improvement: introduce internal storage adapters and keep `DMutex.acquire()`, `lock()`, `unlock()`, and `extend()` backend-neutral.
 - Acceptance criteria:
   - Existing MongoDB constructor usage remains compatible.
-  - Redis can be selected through constructor options without changing lock call sites.
+  - Supported backends can be selected through constructor options without changing lock call sites.
   - Ownership-token release and renewal semantics are shared across backends.
 
 ### 10. Redis backend
@@ -106,20 +106,20 @@
 
 - Status: Done
 - Problem: using `mongodb` package types and peer dependencies makes the library appear locked to a specific driver version.
-- Improvement: use small structural client interfaces and keep official MongoDB/Redis clients outside runtime dependencies.
+- Improvement: use small structural client interfaces and keep official backend clients outside runtime dependencies.
 - Acceptance criteria:
-  - Runtime package has no `mongodb` or `redis` dependency or peer dependency.
-  - Public declarations do not import types from `mongodb` or `redis`.
-  - Official clients remain compatible through structural typing.
+  - Runtime package has no backend driver dependency or peer dependency.
+  - Public declarations do not import backend driver types.
+  - Official clients remain compatible through structural typing or small adapters.
 
 ### 12. Runtime options
 
 - Status: Done
 - Problem: database name, collection naming, and default TTL are hardcoded.
-- Improvement: support constructor options for MongoDB database/collection naming, Redis key prefixing, automatic backend detection, and `defaultTtlSeconds`.
+- Improvement: support constructor options for backend naming, automatic backend detection, and `defaultTtlSeconds`.
 - Acceptance criteria:
   - Existing constructor usage remains valid.
-  - Advanced users can isolate databases/collections per environment.
+  - Advanced users can isolate backend resources per environment.
   - Normal users do not need to pass a backend option when the injected client shape is unambiguous.
 
 ### 13. Renewal API
@@ -134,8 +134,8 @@
 ### 14. Documentation updates
 
 - Status: Done
-- Problem: README explains the current limitation but should match the improved ownership and takeover behavior.
-- Improvement: document handle-based acquisition, safe release, legacy methods, TTL caveats, and MongoDB/Redis requirements.
+- Problem: README should match the improved ownership, takeover behavior, and supported backend set.
+- Improvement: document handle-based acquisition, safe release, legacy methods, TTL caveats, backend requirements, and supported adapter behavior.
 - Acceptance criteria:
   - Examples use the safest API by default.
   - Operational caveats are explicit.
@@ -154,10 +154,10 @@
 ### 16. Docker-backed integration test command
 
 - Status: Done
-- Problem: developers must manually coordinate MongoDB/Redis startup before running integration tests.
+- Problem: developers must manually coordinate real backing service startup before running integration tests.
 - Improvement: add a package script that starts Docker Compose services, waits for healthchecks, runs integration tests, and tears services down.
 - Acceptance criteria:
-  - A single command can run the full integration suite against real MongoDB and Redis.
+  - A single command can run the full integration suite against real MongoDB, Redis, PostgreSQL, DynamoDB Local, and MySQL.
   - Services are stopped when the command exits.
   - Manual Docker Compose instructions remain available for debugging.
 
@@ -166,7 +166,7 @@
 ### 17. Additional store adapter roadmap
 
 - Status: Done
-- Problem: applications that already depend on stores other than MongoDB or Redis cannot use `dmutex` without introducing a new infrastructure dependency.
+- Problem: applications that already depended on stores other than MongoDB or Redis could not use `dmutex` without introducing a new infrastructure dependency.
 - Improvement: expand backend support in the following order:
   1. PostgreSQL - Done
   2. DynamoDB - Done

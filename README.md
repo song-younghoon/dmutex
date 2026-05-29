@@ -317,7 +317,7 @@ await redisClient.close();
 Creates a mutex instance for a service.
 
 - `serviceName`: service identifier used for backend-specific namespacing
-- `client`: MongoDB or Redis client. `dmutex` detects the backend from the injected client shape.
+- `client`: backend client or structural adapter. `dmutex` detects the backend from the injected client shape.
 - `options.defaultTtlSeconds`: default lock TTL. Defaults to 300 seconds.
 - `options.backend`: optional explicit backend override, either `mongodb`, `redis`, `postgresql`, `dynamodb`, `mysql`, `d1`, or `firestore`. Use this when a wrapped client matches more than one backend contract.
 
@@ -374,7 +374,8 @@ Firestore uses the `_dmutex_${serviceName}` collection by default. Backend keys 
 await dmutex.ready();
 ```
 
-Waits for backend initialization. For MongoDB, this waits for the TTL index to be created. For Redis, this is a no-op. `acquire()`, `lock()`, `unlock()`, and `extend()` also wait for any required initialization internally, but calling `ready()` during application startup surfaces MongoDB initialization failures earlier.
+Waits for backend initialization. For MongoDB, this waits for the TTL index to be created. For Redis, this is a no-op. `acquire()`, `lock()`, `unlock()`, and `extend()` also wait for any required initialization internally, but calling `ready()` during application startup surfaces backend initialization failures earlier.
+For PostgreSQL, MySQL, and Cloudflare D1, this creates the backing table and index when needed. For DynamoDB, this creates the table by default and waits until it is active. For Firestore, this is a no-op.
 
 ### `run(key, callback, ttl?)`
 
@@ -512,11 +513,11 @@ Extends the TTL for an active lock with the matching token. Returns `true` on su
 Creates a semaphore instance for a service.
 
 - `serviceName`: service identifier used for backend-specific namespacing
-- `client`: MongoDB or Redis client. Backend detection is the same as `DMutex`.
+- `client`: backend client or structural adapter. Backend detection is the same as `DMutex`.
 - `options.maxPermits`: maximum concurrent permits per key. Must be a positive integer.
-- `options.defaultTtlSeconds`, `options.backend`, MongoDB options, and Redis options are the same as `DMutex`.
+- `options.defaultTtlSeconds`, `options.backend`, and backend-specific options are the same as `DMutex`.
 
-MongoDB uses the `_dsemaphore_${serviceName}` collection by default. Redis uses `_dsemaphore_${serviceName}:` as the default key prefix. Backend keys include internal permit-slot names. Explicit `collectionName`, `collectionPrefix`, and `keyPrefix` options override these defaults.
+MongoDB and Firestore use the `_dsemaphore_${serviceName}` collection by default. Redis uses `_dsemaphore_${serviceName}:` as the default key prefix. PostgreSQL, DynamoDB, MySQL, and Cloudflare D1 use the `_dsemaphore_${serviceName}` table by default. Backend keys include internal permit-slot names. Explicit backend naming options override these defaults.
 
 ### `semaphore.acquire(key, ttl?)`
 
@@ -641,7 +642,7 @@ Project layout:
 ```text
 src/                 Runtime library source
 tests/unit/          Fast tests that do not require external services
-tests/integration/   MongoDB and Redis integration tests
+tests/integration/   MongoDB, Redis, PostgreSQL, DynamoDB Local, and MySQL integration tests
 docs/                Project planning and maintenance notes
 ```
 
