@@ -1,7 +1,7 @@
 {
   "name": "dmutex",
-  "version": "0.3.0",
-  "description": "A small TypeScript distributed mutex and semaphore library for MongoDB, Redis, and PostgreSQL.",
+  "version": "0.4.0",
+  "description": "A small TypeScript distributed mutex and semaphore library for MongoDB, Redis, PostgreSQL, DynamoDB, MySQL, Cloudflare D1, and Firestore.",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
